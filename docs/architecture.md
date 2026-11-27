@@ -180,7 +180,85 @@ retireSupersededRecords                  # 关闭被取代记录的 validTo
 `TextMemoryStore` 契约（upsert/get/delete/deleteScope/search/listAll/stats）是存储可替换的边界。
 `listAll` 只供备份/导出使用，绕过作用域过滤；召回仍必须走 `search(scope)`。
 
-## 12. 安全与隐私
+## 12. 数据生命周期
+
+一条记忆从进入系统到被物理删除，依次经过**写入 → 投影 → 检索 → 过期 → 清理**；
+导出/导入是跨阶段的旁路维护操作。除检索时按 `validTo` 过滤外，系统没有后台定时任务：
+投影在请求内同步完成，过期记录只有在运行 `purge --expired` 时才真正删除。
+
+### 12.1 各阶段
+
+| 阶段 | 何时发生 | 触发方式 | 影响的 scope |
+| --- | --- | --- | --- |
+| 写入 | 请求内同步，写完才返回 | `remember`、`reportTask`、`reportSession`、嵌入式 `project`、`import` | 仅目标记录自己的 scope；`supersedes` 跨 scope 直接拒绝 |
+| 投影 | 写入之前，在 `report*` / `project` 调用内 | `ButlerSessionProjector`、`TaskResultProjector` 或自定义 projector | 会话投影产出 user scope；任务投影产出 project scope |
+| 检索 | 每次 `recall` / `inject` 读取时 | 只读查询 | 单次查询只读一个 scope；`inject` 分别读一次 user 和当前 project |
+| 过期清理 | 手动执行维护命令时 | `purge --expired [--dry-run] [--yes]` | 全部 user / project scope，不按 owner 或 project 过滤 |
+| 导出 / 导入 | 手动执行维护命令时 | `export --out`、`import --in` | 全部 scope；导入保留记录自带的 `ownerId` / `projectId` |
+
+**写入**：所有路径最终都落到 `TextMemoryStore.upsert` / `upsertMany`。`JsonTextStore`
+每次写入操作都整文件原子重写（临时文件 + rename），进程退出后仍在；`InMemoryTextStore`
+只存在于当前进程；`PostgresTextStore` 按 `id` 做行级 upsert。`supersedes` 指向的旧记录
+在新记录写入之后由 `retireSupersededRecords` 关闭有效期（写入 `validTo`），不是删除。
+
+**投影**：`projectAndStore` 先跑纯函数 projector，按 `id` 去重后批量 upsert，最后在
+「写入成功且无 issue」时推进 checkpoint。projector 抛错只记入 `issues`，不中断整批，
+checkpoint 不前进，同一批事件可重放；稳定 `stableMemoryId` 保证重放不会产生重复记录。
+默认的 `AgentRagService` 使用进程内 checkpoint，重启后事件可重放，仍靠稳定 id 保持幂等。
+
+**检索**：`recall` / `inject` 只走 `search(scope)`，不会读全库。默认过滤
+`sensitivity = secret` 和已过期记录（`validTo <= now`）。`recall` 可通过
+`includeSensitive` / `includeExpired` 显式放开；`inject` 只能通过 `includeSensitive`
+放开敏感级，过期记录始终不注入。`listAll()` 绕过作用域与过滤，只用于统计、维护和
+导出，不能用于召回。
+
+**过期清理**：过期首先是**读时语义**：`validTo` 到点后记录不再被召回，但仍占用存储、
+仍出现在 `stats` 与导出结果中。`purge --expired` 通过 `listAll()` 跨 scope 找出
+`validTo <= now` 的记录，按 `id` 逐条删除；没有 `validTo` 或尚未到期的记录保留。
+默认只预览，必须带 `--yes` 才删除；`--dry-run` 即使同时带 `--yes` 也永不写入。
+注意这是物理删除，不保留墓碑，无法通过检索恢复（只能靠清理前的导出）。
+
+**导出 / 导入**：`export` 导出全部记录（含 `secret` 与已过期），按 `id` 排序写成 JSONL，
+目标文件存在时需 `--force`；`import` 先整文件解析校验，任一非法行则整批不写入，
+通过后按 `id` 幂等 upsert，后出现的同 `id` 行覆盖先出现的。导入不按当前 `--owner`
+校验归属，也不改写记录里的 `ownerId` / `projectId`，因此会影响备份中涉及的每一个
+scope；它不经过 projector，不推进 checkpoint，也不触发 `supersedes` 的旧记录关闭，
+记录里的 `validTo` 原样保留。
+
+### 12.2 示例：从写入到过期清理
+
+以一次任务上报为例（HTTP / MCP / 嵌入式调用等价）：
+
+1. 助手调用 `reportTask`，参数含 `ownerId=user_me`、`projectId=prj_ab12`、`taskId=t1`、
+   `status=completed`；服务把它包装成 project scope 的投影事件。
+2. `TaskResultProjector` 产出 `task_summary`：`validFrom = occurredAt`、不设 `validTo`，
+   `id` 由 scope + owner + project + taskId 稳定生成。
+3. `projectAndStore` 去重后 `upsertMany`，`JsonTextStore` 原子落盘；无 issue 时推进
+   checkpoint。响应返回 `written` 与 `recordIds`，记录立即可查。
+4. 之后的 `recall` / `inject` 能召回这条记录；`secret` 与已过期记录默认被过滤。
+5. 后续结论取代它时，在同一 scope 写入新记录并在 `supersedes` 中列出旧 `id`；旧记录
+   `validTo` 被设为新记录的生效时间，从此不再被默认召回，但仍在库中。
+6. 到达 `validTo` 后，`recall` / `inject` 不再返回它；`stats`、`export`、`listAll()`
+   仍能看到它。
+7. 维护者先预览再实际清理，记录被物理删除：
+
+```bash
+# 预览：列出 user / project 两个 scope 中已过期的条数，不写入
+agent-rag purge --expired
+
+# 确认后物理删除（跨 scope）
+agent-rag purge --expired --yes
+```
+
+8. 如需留档或迁移，在清理前导出；需要回滚时按 `id` 幂等导入（已过期记录导入后
+   仍然不会被召回，因为 `validTo` 原样保留）：
+
+```bash
+agent-rag export --out ~/agent-rag-backup.jsonl
+agent-rag import --in ~/agent-rag-backup.jsonl
+```
+
+## 13. 安全与隐私
 
 - 默认只监听 `127.0.0.1`；跨机部署必须配置 `--token`。
 - 不采集遥测，不向第三方发送数据。
@@ -188,7 +266,7 @@ retireSupersededRecords                  # 关闭被取代记录的 validTo
 - 仓库本身不包含任何用户数据；运行数据默认在 `~/.agent-rag/`，请勿提交。
 - 开源仓库的 issue/PR 中不要粘贴真实记忆内容。
 
-## 13. 版本与兼容
+## 14. 版本与兼容
 
 - `MEMORY_SCHEMA_VERSION = 1`。新增可选字段属于兼容变更；删除/改语义需升版本并提供迁移脚本。
 - 当前 0.1.0 的能力边界：文本检索、单用户、任务/会话两类投影、MCP/HTTP/嵌入式三种接入。
