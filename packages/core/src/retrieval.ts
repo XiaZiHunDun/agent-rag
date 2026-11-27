@@ -30,6 +30,8 @@ export interface MemoryHit {
 export interface MemoryStoreStats {
   readonly total: number
   readonly byScope: Readonly<Record<string, number>>
+  /** Per-kind counts; optional for stores that cannot provide them. */
+  readonly byKind?: Readonly<Record<string, number>>
 }
 
 /** Common contract implemented by text stores (in-memory, SQLite FTS, Postgres). */

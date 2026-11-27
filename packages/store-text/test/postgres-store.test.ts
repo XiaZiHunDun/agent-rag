@@ -117,11 +117,11 @@ test("upsert replaces and deleteScope removes only the target project", async ()
   assert.equal((await store.search({ scope: p2, text: "8080", limit: 10 })).length, 1)
 })
 
-test("empty query returns recent records and stats group scopes", async () => {
+test("empty query returns recent records and stats group scopes and kinds", async () => {
   await store.upsertMany([
-    record(p1, { title: "旧记录", text: "x", updatedAt: "2026-01-01T00:00:00Z" }),
-    record(p1, { title: "新记录", text: "y", updatedAt: "2026-11-01T00:00:00Z" }),
-    record(userScope, { title: "用户偏好", text: "先结论后细节。" }),
+    record(p1, { title: "旧记录", text: "x", updatedAt: "2026-01-01T00:00:00Z", kind: "note" }),
+    record(p1, { title: "新记录", text: "y", updatedAt: "2026-11-01T00:00:00Z", kind: "decision" }),
+    record(userScope, { title: "用户偏好", text: "先结论后细节。", kind: "preference" }),
   ])
   const hits = await store.search({ scope: p1, text: "", limit: 10 })
   assert.deepEqual(hits.map((hit) => hit.record.title), ["新记录", "旧记录"])
@@ -129,4 +129,5 @@ test("empty query returns recent records and stats group scopes", async () => {
   const stats = await store.stats()
   assert.equal(stats.total, 3)
   assert.deepEqual(Object.values(stats.byScope).sort(), [1, 2])
+  assert.deepEqual(stats.byKind, { note: 1, decision: 1, preference: 1 })
 })

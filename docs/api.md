@@ -190,7 +190,7 @@ Authorization: Bearer <token>
 ### GET /v1/stats
 
 ```json
-{ "total": 42, "byScope": { "user\u0000user_me\u0000": 10, "project\u0000user_me\u0000prj_…": 32 } }
+{ "total": 42, "byScope": { "user\u0000user_me\u0000": 10, "project\u0000user_me\u0000prj_…": 32 }, "byKind": { "note": 30, "decision": 12 } }
 ```
 
 ### 状态码
@@ -217,7 +217,7 @@ MCP server 通过 `agent-rag mcp --owner <id>` 启动，`--project <path>` 可�
 | `memory_report_task` | `taskId`, `goal`, `summary`, `status`, `projectId?`, `project?`, `changedFiles?`, `tests?`, `items?` | `{ projectId, written, recordIds, issues }` |
 | `memory_report_session` | `sessionId`, `summary`, `profile?`, `facts?` | `{ written, recordIds, issues }` |
 | `project_resolve` | `remoteUrl?`, `localPath?`, `name?` | `ProjectIdentity` |
-| `memory_stats` | 无 | `{ total, byScope }` |
+| `memory_stats` | 无 | `{ total, byScope, byKind }` |
 
 推荐的助手侧调用顺序：
 

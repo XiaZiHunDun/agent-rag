@@ -32,6 +32,56 @@ test("unknown command exits non-zero", () => {
   assert.match(result.stderr, /unknown command/)
 })
 
+test("stats includes byKind only when --by-kind is passed", () => {
+  const dir = mkdtempSync(join(tmpdir(), "agent-rag-cli-stats-"))
+  try {
+    const dataDir = join(dir, "data")
+    const seeds = [
+      ["note", "A", "alpha"],
+      ["note", "B", "beta"],
+      ["decision", "C", "gamma"],
+    ] as const
+    for (const [kind, title, text] of seeds) {
+      const result = runCli(
+        "remember",
+        "--data-dir",
+        dataDir,
+        "--owner",
+        "user-1",
+        "--kind",
+        kind,
+        "--title",
+        title,
+        "--text",
+        text,
+      )
+      assert.equal(result.status, 0, result.stderr)
+    }
+
+    const plain = runCli("stats", "--data-dir", dataDir)
+    assert.equal(plain.status, 0, plain.stderr)
+    const plainStats = JSON.parse(plain.stdout) as {
+      total: number
+      byScope: Record<string, number>
+      byKind?: unknown
+    }
+    assert.equal(plainStats.total, 3)
+    assert.equal(plainStats.byKind, undefined)
+    assert.ok(Object.keys(plainStats.byScope).length > 0)
+
+    const detailed = runCli("stats", "--data-dir", dataDir, "--by-kind")
+    assert.equal(detailed.status, 0, detailed.stderr)
+    const detailedStats = JSON.parse(detailed.stdout) as {
+      total: number
+      byKind?: Record<string, number>
+    }
+    assert.equal(detailedStats.total, 3)
+    assert.deepEqual(detailedStats.byKind, { note: 2, decision: 1 })
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 test("resolve --path reuses the project identity of its git remote", () => {
   const dir = mkdtempSync(join(tmpdir(), "agent-rag-cli-resolve-"))
   try {
