@@ -60,15 +60,20 @@ test("enrichment leaves explicit remotes and non-repositories untouched", async 
 })
 
 test("supports git worktree pointer files", async () => {
-  const gitDir = join(dir, "real-git")
-  mkdirSync(gitDir, { recursive: true })
+  const commonGit = join(dir, "main", ".git")
+  mkdirSync(commonGit, { recursive: true })
   writeFileSync(
-    join(gitDir, "config"),
+    join(commonGit, "config"),
     `[remote "origin"]\n\turl = https://github.com/o/worktree-repo.git\n`,
   )
+  // A linked worktree keeps HEAD/index in its own gitdir and points at the
+  // shared config through `commondir`.
+  const worktreeGitDir = join(commonGit, "worktrees", "wt")
+  mkdirSync(worktreeGitDir, { recursive: true })
+  writeFileSync(join(worktreeGitDir, "commondir"), "../..\n")
   const worktree = join(dir, "worktree")
   mkdirSync(worktree, { recursive: true })
-  writeFileSync(join(worktree, ".git"), `gitdir: ${gitDir}\n`)
+  writeFileSync(join(worktree, ".git"), `gitdir: ${worktreeGitDir}\n`)
 
   assert.equal(
     await discoverGitRemote(worktree),

@@ -17,6 +17,16 @@ function remoteFromConfig(config: string): string | undefined {
 }
 
 /**
+ * A linked worktree's gitdir has no `config` of its own; the repository config
+ * lives in the common dir referenced by `commondir` (normally `<gitdir>/../..`).
+ */
+async function configOf(gitDir: string): Promise<string> {
+  if (await lstat(join(gitDir, "config")).catch(() => null)) return join(gitDir, "config")
+  const common = (await readFile(join(gitDir, "commondir"), "utf8").catch(() => "")).trim()
+  return common ? resolvePath(gitDir, common, "config") : join(gitDir, "config")
+}
+
+/**
  * Read the git remote URL of a local working tree.
  *
  * Supports regular repositories and `git worktree` (where `.git` is a file
@@ -34,7 +44,7 @@ export async function discoverGitRemote(localPath: string): Promise<string | und
     gitDir = resolvePath(resolvePath(localPath), match[1]!.trim())
   }
 
-  const config = await readFile(join(gitDir, "config"), "utf8").catch(() => "")
+  const config = await readFile(await configOf(gitDir), "utf8").catch(() => "")
   return remoteFromConfig(config)
 }
 
