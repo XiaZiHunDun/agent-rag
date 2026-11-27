@@ -33,6 +33,7 @@ interface CliValues {
   readonly "max-chars"?: string
   readonly sensitivity?: string
   readonly tag?: string[]
+  readonly "by-kind"?: boolean
   readonly yes?: boolean
   readonly help?: boolean
 }
@@ -82,6 +83,9 @@ remember options:
   --scope user|project    Default: project when a project id is known
   --tag <tag>             Repeatable
   --sensitivity <level>   normal|private|secret
+
+stats options:
+  --by-kind               Include per-kind record counts
 
 Examples:
   agent-rag mcp --owner user_me --project ~/projects/agent-rag
@@ -238,7 +242,9 @@ async function commandResolve(values: CliValues): Promise<void> {
 
 async function commandStats(values: CliValues): Promise<void> {
   const stores = await loadStores(values)
-  console.log(JSON.stringify(await stores.store.stats(), null, 2))
+  const stats = await stores.store.stats()
+  const output = values["by-kind"] ? stats : { total: stats.total, byScope: stats.byScope }
+  console.log(JSON.stringify(output, null, 2))
 }
 
 async function commandRecall(values: CliValues, positionals: readonly string[]): Promise<void> {
@@ -357,6 +363,7 @@ async function main(): Promise<void> {
       "max-chars": { type: "string" },
       sensitivity: { type: "string" },
       tag: { type: "string", multiple: true },
+      "by-kind": { type: "boolean" },
       yes: { type: "boolean" },
       help: { type: "boolean" },
     },

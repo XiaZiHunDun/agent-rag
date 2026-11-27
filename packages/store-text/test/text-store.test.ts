@@ -143,14 +143,15 @@ test("delete and deleteScope remove records and index entries", async () => {
   assert.equal((await store.search({ scope: p2, text: "gamma", limit: 10 })).length, 1)
 })
 
-test("stats group records by full scope key", async () => {
+test("stats group records by full scope key and kind", async () => {
   const store = new InMemoryTextStore()
   await store.upsertMany([
-    record(userScope, { title: "U", text: "u" }),
-    record(p1, { title: "P1", text: "p1" }),
-    record(p1, { title: "P1b", text: "p1b" }),
+    record(userScope, { title: "U", text: "u", kind: "preference" }),
+    record(p1, { title: "P1", text: "p1", kind: "note" }),
+    record(p1, { title: "P1b", text: "p1b", kind: "decision" }),
   ])
   const stats = await store.stats()
   assert.equal(stats.total, 3)
   assert.deepEqual(Object.values(stats.byScope).sort(), [1, 2])
+  assert.deepEqual(stats.byKind, { preference: 1, note: 1, decision: 1 })
 })
