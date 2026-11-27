@@ -77,6 +77,23 @@ curl -s http://127.0.0.1:8787/v1/context \
 
 接口明细见 [docs/api.md](docs/api.md)。
 
+生产环境推荐只跑一个共享 `serve` 进程，助手侧 MCP 用远程模式接入：
+
+```bash
+# 1) 共享服务：单进程持有 memory.json，避免多进程快照互相覆盖
+node packages/server/src/cli.ts serve --owner user_me --host 127.0.0.1 --port 8787 \
+  --token "$AGENT_RAG_TOKEN"
+
+# 2) 助手侧 MCP 不再持有本地数据，只做 HTTP 转发
+node packages/server/src/cli.ts mcp \
+  --remote http://127.0.0.1:8787 \
+  --token "$AGENT_RAG_TOKEN" \
+  --owner user_me --client dsh-wfxm --project /path/to/repo
+```
+
+`--remote` 也可用 `AGENT_RAG_REMOTE`，`--token` 可用 `AGENT_RAG_TOKEN`。远程模式下 `--project`
+先在本机读取 git remote，再向服务端换取同一个 `projectId`。
+
 ### 命令行
 
 ```bash

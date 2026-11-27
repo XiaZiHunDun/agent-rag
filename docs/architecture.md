@@ -167,7 +167,7 @@ retireSupersededRecords                  # 关闭被取代记录的 validTo
 | --- | --- | --- |
 | 嵌入式 SDK | 与 Node 同进程的助手（WFXM 当前用法） | `new AgentRagClient({ store })`，注入 `butler` / `task` 端口 |
 | HTTP JSON API | 独立部署、跨语言、多助手共享 | `agent-rag serve`，默认绑定 127.0.0.1，可加 Bearer token |
-| MCP stdio | dsh-wfxm、支持 MCP 的 IDE/Agent | `agent-rag mcp`，暴露 context/recall/remember/report 等工具 |
+| MCP stdio | dsh-wfxm、支持 MCP 的 IDE/Agent | `agent-rag mcp`，暴露 context/recall/remember/report 等工具；加 `--remote <url>` 时改为 HTTP 转发，与 `serve` 共用一份数据 |
 
 所有写入都会携带 `source.client`（`wfxm` / `dsh-wfxm` / `cli` 等），便于追溯数据来源。
 

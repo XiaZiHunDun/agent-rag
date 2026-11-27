@@ -1,5 +1,5 @@
 import { parseArgs } from "node:util"
-import { collectInjection } from "@agent-rag/client"
+import { AgentRagHttpClient, collectInjection } from "@agent-rag/client"
 import type { MemoryKind } from "@agent-rag/core"
 import { createHttpServer } from "./http-server.ts"
 import { runMcpServer } from "./mcp-server.ts"
@@ -20,6 +20,7 @@ interface CliValues {
   readonly host?: string
   readonly port?: string
   readonly token?: string
+  readonly remote?: string
   readonly "remote-url"?: string
   readonly path?: string
   readonly name?: string
@@ -63,7 +64,13 @@ Common options:
 serve options:
   --host <host>           Default 127.0.0.1
   --port <port>           Default 8787
-  --token <token>         Require Authorization: Bearer <token>
+  --token <token>         Require Authorization: Bearer <token> (or AGENT_RAG_TOKEN)
+
+mcp options:
+  --remote <url>          Use a shared agent-rag server instead of a local store
+                          (or AGENT_RAG_REMOTE, e.g. http://127.0.0.1:8787)
+  --token <token>         Token for the shared server (or AGENT_RAG_TOKEN)
+  --project <path>        Resolved remotely to a projectId on the shared server
 
 inject options:
   --goal <text>           Current task goal
@@ -78,6 +85,7 @@ remember options:
 
 Examples:
   agent-rag mcp --owner user_me --project ~/projects/agent-rag
+  agent-rag mcp --remote http://127.0.0.1:8787 --project ~/projects/agent-rag
   agent-rag serve --owner user_me --port 8787
   agent-rag inject --owner user_me --project . --goal "修复登录超时"
   agent-rag resolve --remote-url git@github.com:owner/repo.git
@@ -131,6 +139,10 @@ function createService(
   })
 }
 
+function resolveToken(values: CliValues): string | undefined {
+  return values.token ?? process.env["AGENT_RAG_TOKEN"]
+}
+
 async function commandServe(values: CliValues): Promise<void> {
   const stores = await loadStores(values)
   const projectId = await resolveProjectId(stores, values)
@@ -141,11 +153,12 @@ async function commandServe(values: CliValues): Promise<void> {
     throw new Error(`invalid port: ${values.port}`)
   }
 
+  const token = resolveToken(values)
   const server = createHttpServer({
     service,
     name: "agent-rag",
     version: VERSION,
-    ...(values.token === undefined ? {} : { token: values.token }),
+    ...(token === undefined ? {} : { token }),
   })
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject)
@@ -164,6 +177,36 @@ async function commandServe(values: CliValues): Promise<void> {
 
 async function commandMcp(values: CliValues): Promise<void> {
   const ownerId = requireOwner(values)
+  const clientName = values.client ?? process.env["AGENT_RAG_CLIENT"] ?? "mcp"
+  const remote = values.remote ?? process.env["AGENT_RAG_REMOTE"]
+
+  if (remote) {
+    const token = resolveToken(values)
+    const http = new AgentRagHttpClient({
+      baseUrl: remote,
+      ownerId,
+      client: clientName,
+      ...(token === undefined ? {} : { token }),
+    })
+    let projectId = values["project-id"]
+    const localPath = values.project ?? values.path
+    if (projectId === undefined && localPath !== undefined) {
+      const locator = await enrichProjectLocator({ localPath })
+      projectId = (await http.resolveProject(locator)).projectId
+    }
+    console.error(
+      `[agent-rag] mcp remote=${remote} owner=${ownerId}${projectId ? ` project=${projectId}` : ""}`,
+    )
+    await runMcpServer({
+      service: http,
+      defaultOwnerId: ownerId,
+      ...(projectId === undefined ? {} : { defaultProjectId: projectId }),
+      defaultClient: clientName,
+      version: VERSION,
+    })
+    return
+  }
+
   const stores = await loadStores(values)
   const projectId = await resolveProjectId(stores, values)
   const service = createService(stores, values, projectId)
@@ -175,7 +218,7 @@ async function commandMcp(values: CliValues): Promise<void> {
     service,
     defaultOwnerId: ownerId,
     ...(projectId === undefined ? {} : { defaultProjectId: projectId }),
-    defaultClient: values.client ?? process.env["AGENT_RAG_CLIENT"] ?? "mcp",
+    defaultClient: clientName,
     version: VERSION,
   })
 }
@@ -297,6 +340,7 @@ async function main(): Promise<void> {
       host: { type: "string" },
       port: { type: "string" },
       token: { type: "string" },
+      remote: { type: "string" },
       "remote-url": { type: "string" },
       path: { type: "string" },
       name: { type: "string" },

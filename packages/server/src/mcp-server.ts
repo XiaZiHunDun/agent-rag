@@ -1,12 +1,45 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod"
-import type { MemoryFacts, MemoryKind, ProjectLocator } from "@agent-rag/core"
-import type { SessionFactInput } from "@agent-rag/client"
-import type { AgentRagService } from "./service.ts"
+import type {
+  MemoryFacts,
+  MemoryHit,
+  MemoryKind,
+  MemoryRecord,
+  MemoryStoreStats,
+  ProjectIdentity,
+  ProjectLocator,
+} from "@agent-rag/core"
+import type {
+  MemoryInjectionRequest,
+  MemoryInjectionResult,
+  RecallRequest,
+  RememberRequest,
+  ReportResult,
+  SessionFactInput,
+  SessionReportInput,
+  TaskReportInput,
+} from "@agent-rag/client"
+
+type OwnerScoped<T> = Omit<T, "ownerId"> & { readonly ownerId?: string }
+
+/**
+ * Backend required by the MCP tools. Both the embedded AgentRagService and the
+ * remote AgentRagHttpClient satisfy it, so `mcp --remote` and local stdio share
+ * the same tool implementations.
+ */
+export interface McpMemoryBackend {
+  inject(request: OwnerScoped<MemoryInjectionRequest>): Promise<MemoryInjectionResult>
+  recall(request: RecallRequest): Promise<readonly MemoryHit[]>
+  remember(request: RememberRequest): Promise<MemoryRecord>
+  reportTask(request: OwnerScoped<TaskReportInput>): Promise<ReportResult>
+  reportSession(request: OwnerScoped<SessionReportInput>): Promise<ReportResult>
+  resolveProject(locator: ProjectLocator): Promise<ProjectIdentity>
+  stats(): Promise<MemoryStoreStats>
+}
 
 export interface McpServerOptions {
-  readonly service: AgentRagService
+  readonly service: McpMemoryBackend
   /** Owner used when a tool call does not pass ownerId. */
   readonly defaultOwnerId?: string
   readonly defaultProjectId?: string

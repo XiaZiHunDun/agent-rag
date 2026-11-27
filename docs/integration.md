@@ -139,6 +139,35 @@ await rag.reportTask({
 
 任意语言也可直接调 HTTP 接口，见 [api.md](api.md)。
 
+### 3.1 MCP 远程模式（推荐：多助手共用一份数据）
+
+stdio MCP 每个进程各持一份 JSON 快照：外部写入不可见，多个进程还可能互相覆盖。
+让所有助手连接到同一个 `serve` 进程即可消除这个问题：
+
+```jsonc
+{
+  "mcpServers": {
+    "agent_rag": {
+      "command": "/usr/bin/node",
+      "args": [
+        "/path/to/agent-rag/packages/server/src/cli.ts",
+        "mcp",
+        "--remote", "http://127.0.0.1:8787",
+        "--owner", "user_me",
+        "--client", "dsh-wfxm",
+        "--project", "/path/to/repo"
+      ],
+      "env": { "AGENT_RAG_TOKEN": "<与 serve 一致>" }
+    }
+  }
+}
+```
+
+- `--remote`（或 `AGENT_RAG_REMOTE`）：共享服务地址；设置后 MCP 不再读写本地 `--data-dir`。
+- `--token`（或 `AGENT_RAG_TOKEN`）：与服务端 `--token` 保持一致。
+- `--project`：先在本机读取 git origin，再向服务端解析 `projectId`，不同 clone 仍归一到同一项目。
+- `--data-dir` 只属于 `serve`；服务进程是唯一写入方。
+
 ## 多端复用的工作机制
 
 1. 项目：`remoteUrl` 规范化为 `host/owner/repo` → `projectId = prj_ + sha256(key)[0:16]`。
@@ -157,4 +186,6 @@ await rag.reportTask({
 | 项目记忆为空 | `project_resolve` 看 `projectId` 是否一致；检查各助手是否传了同一 remote |
 | 两个 clone 得到不同 projectId | 本地 `.git/config` 没有 origin，或使用了不同 fork 的 remote |
 | 401 | HTTP 服务设置了 `--token`，客户端需带 `Authorization: Bearer` |
+| MCP 远程模式 401 | 助手侧 `--token` 与 `serve --token`（或两侧 `AGENT_RAG_TOKEN`）不一致 |
+| 一个助手写入后另一个看不到 | 各助手仍在用 stdio 各持快照；改用 `mcp --remote` 指向同一个 `serve` |
 | 找不到 `.ts` 模块 | Node 版本需 ≥ 22.18（推荐 24）；低版本需加 `--experimental-strip-types` |
