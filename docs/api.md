@@ -185,7 +185,8 @@ Authorization: Bearer <token>
 { "ownerId": "user_me", "projectId": "prj_…" }
 ```
 
-省略 `projectId` 时删除整个 user scope；响应 `{ "deleted": 3 }`。
+省略 `projectId` 时删除整个 user scope；响应 `{ "deleted": 3 }`。该接口只支持
+整域删除；按来源撤销记忆请使用 CLI 的 `forget --source <client>`。
 
 ### GET /v1/stats
 
@@ -243,7 +244,7 @@ MCP server 通过 `agent-rag mcp --owner <id>` 启动，`--project <path>` 可�
 | `stats [--by-kind]` | 输出记录计数 |
 | `export --out <path>` | 把 store 中全部记录导出为 JSONL |
 | `import --in <path>` | 从 JSONL 按 id 幂等导入 |
-| `forget --yes` | 删除整个作用域 |
+| `forget [--source <client>] [--dry-run] [--yes]` | 删除整个作用域，或按来源撤销记忆 |
 
 ### `export --out <path>`
 
@@ -280,3 +281,35 @@ agent-rag import --in ~/agent-rag-backup.jsonl
 
 成功时输出 `{ "imported": N, "in": "..." }`（JSON）。导入不校验记录是否属于当前
 `--owner`，备份中的 `ownerId` / `projectId` 原样保留，便于跨机器迁移。
+
+### `forget`
+
+两种模式：
+
+- **整域删除**（原有语义）：不带 `--source` 时，按 `--project` / `--project-id`
+  选择 project scope，否则删除 user scope；`--owner` 必填，实际删除需要
+  `--yes`；带 `--dry-run` 时只预览匹配条数，不写入。
+- **按来源撤销**：带 `--source <client>` 时，删除 `source.client` 严格等于
+  `<client>` 的全部记录，跨 user / project scope，不按 `owner` 或 `project`
+  过滤。
+
+按来源撤销时：
+
+- 未带 `--yes` 只预览匹配条数，不写入；
+- `--dry-run` 即使同时带 `--yes` 也只预览，不写入；
+- 只删除 `source.client` 等于目标的记录；`source.client` 不同或缺失的记录
+  保持不变；
+- 没有匹配记录时输出 `matched: 0`、`deleted: 0`，退出码仍为 0。
+
+成功时输出 `{ "source": "...", "matched": N, "deleted": M, "dryRun": true|false }`
+（JSON）。`matched` 是匹配条数，`deleted` 是实际删除条数；预览时
+`deleted` 为 0。
+
+```bash
+# 预览
+agent-rag forget --source wfxm
+# 实际删除
+agent-rag forget --source wfxm --yes
+# 显式 dry-run
+agent-rag forget --source wfxm --dry-run --yes
+```

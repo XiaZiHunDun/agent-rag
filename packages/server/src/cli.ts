@@ -1,7 +1,7 @@
 import { open, readFile, writeFile } from "node:fs/promises"
 import { parseArgs } from "node:util"
 import { AgentRagHttpClient, collectInjection } from "@agent-rag/client"
-import type { MemoryKind } from "@agent-rag/core"
+import { recordMatchesScope, type MemoryKind } from "@agent-rag/core"
 import { createHttpServer } from "./http-server.ts"
 import { parseMemoryJsonl, serializeMemoryJsonl } from "./memory-jsonl.ts"
 import { runMcpServer } from "./mcp-server.ts"
@@ -38,7 +38,9 @@ interface CliValues {
   readonly "by-kind"?: boolean
   readonly out?: string
   readonly in?: string
+  readonly source?: string
   readonly force?: boolean
+  readonly "dry-run"?: boolean
   readonly yes?: boolean
   readonly help?: boolean
 }
@@ -55,7 +57,7 @@ Commands:
   inject                  Print an injectable memory block for a goal
   recall [query]          Search memory and print hits as JSON
   remember                Save one durable fact
-  forget                  Delete a whole scope (requires --yes)
+  forget                  Delete a whole scope or all memory from one source
   resolve                 Resolve a project locator to a stable projectId
   stats                   Print record counts by scope
   export --out <path>     Export all memory records as JSONL
@@ -94,6 +96,14 @@ remember options:
 stats options:
   --by-kind               Include per-kind record counts
 
+forget options:
+  --source <client>       Delete every record whose source.client matches,
+                          across user and project scopes
+  --dry-run               Preview the matched/deleted counts; never writes
+  --yes                   Required to actually delete
+  Without --source, deletes the current scope: project when --project or
+  --project-id is given, otherwise the user scope.
+
 export options:
   --out <path>            Destination JSONL file (required)
   --force                 Overwrite the destination if it already exists
@@ -109,6 +119,8 @@ Examples:
   agent-rag serve --owner user_me --port 8787
   agent-rag inject --owner user_me --project . --goal "修复登录超时"
   agent-rag resolve --remote-url git@github.com:owner/repo.git
+  agent-rag forget --owner user_me --project . --yes
+  agent-rag forget --source wfxm --yes
   agent-rag export --out ~/agent-rag-backup.jsonl
   agent-rag import --in ~/agent-rag-backup.jsonl
 `
@@ -364,13 +376,59 @@ async function commandRemember(values: CliValues): Promise<void> {
   console.log(JSON.stringify(record, null, 2))
 }
 
+async function commandForgetBySource(values: CliValues, source: string): Promise<void> {
+  const client = source.trim()
+  if (!client) {
+    throw new Error("forget --source requires a non-empty client name")
+  }
+
+  const stores = await loadStores(values)
+  const records = await stores.store.listAll()
+  const matches = records.filter((record) => record.source?.client === client)
+  // Without --yes this is a preview; --dry-run makes that explicit even when
+  // --yes is present.
+  const dryRun = values["dry-run"] === true || values.yes !== true
+
+  let deleted = 0
+  if (!dryRun) {
+    for (const record of matches) {
+      await stores.store.delete(record.id)
+      deleted += 1
+    }
+  }
+
+  console.log(
+    JSON.stringify({ source: client, matched: matches.length, deleted, dryRun }, null, 2),
+  )
+}
+
 async function commandForget(values: CliValues): Promise<void> {
+  if (values.source !== undefined) {
+    await commandForgetBySource(values, values.source)
+    return
+  }
+
   const ownerId = requireOwner(values)
+  const stores = await loadStores(values)
+  const projectId = await resolveProjectId(stores, values)
+  if (values["dry-run"]) {
+    const scope = projectId
+      ? { scope: "project" as const, ownerId, projectId }
+      : { scope: "user" as const, ownerId }
+    const records = await stores.store.listAll()
+    const matched = records.filter((record) => recordMatchesScope(record, scope)).length
+    console.log(
+      JSON.stringify(
+        { matched, deleted: 0, scope: projectId ? "project" : "user", dryRun: true },
+        null,
+        2,
+      ),
+    )
+    return
+  }
   if (!values.yes) {
     throw new Error("refusing to delete memory without --yes")
   }
-  const stores = await loadStores(values)
-  const projectId = await resolveProjectId(stores, values)
   const service = createService(stores, values, projectId)
   const deleted = await service.forget({
     ownerId,
@@ -426,7 +484,9 @@ async function main(): Promise<void> {
       "by-kind": { type: "boolean" },
       out: { type: "string" },
       in: { type: "string" },
+      source: { type: "string" },
       force: { type: "boolean" },
+      "dry-run": { type: "boolean" },
       yes: { type: "boolean" },
       help: { type: "boolean" },
     },
