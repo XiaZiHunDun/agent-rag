@@ -126,6 +126,20 @@ test("upsert replaces and deleteScope removes only the target project", async ()
   assert.equal((await store.search({ scope: p2, text: "8080", limit: 10 })).length, 1)
 })
 
+test("delete removes only the requested id", async () => {
+  await store.upsertMany([
+    record(p1, { id: "a", title: "A", text: "alpha" }),
+    record(p1, { id: "b", title: "B", text: "beta" }),
+    record(p2, { id: "c", title: "C", text: "gamma" }),
+  ])
+
+  await store.delete("a")
+  assert.equal(await store.get("a"), null)
+  assert.equal((await store.get("b"))?.id, "b")
+  assert.equal((await store.get("c"))?.id, "c")
+  assert.equal((await store.stats()).total, 2)
+})
+
 test("empty query returns recent records and stats group scopes, kinds and sources", async () => {
   await store.upsertMany([
     record(p1, {

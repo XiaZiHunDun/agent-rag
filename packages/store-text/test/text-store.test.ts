@@ -140,6 +140,9 @@ test("delete and deleteScope remove records and index entries", async () => {
   await store.upsertMany([a, b, other])
 
   await store.delete("a")
+  assert.equal(await store.get("a"), null)
+  assert.equal((await store.get("b"))?.id, "b")
+  assert.equal((await store.get("c"))?.id, "c")
   assert.equal((await store.search({ scope: p1, text: "alpha", limit: 10 })).length, 0)
 
   const deleted = await store.deleteScope(p1)

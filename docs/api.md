@@ -186,7 +186,8 @@ Authorization: Bearer <token>
 ```
 
 省略 `projectId` 时删除整个 user scope；响应 `{ "deleted": 3 }`。该接口只支持
-整域删除；按来源撤销记忆请使用 CLI 的 `forget --source <client>`。
+整域删除；按来源撤销记忆请使用 CLI 的 `forget --source <client>`，按 id 删除
+单条记录请使用 CLI 的 `forget --id <id>`。
 
 ### GET /v1/stats
 
@@ -251,7 +252,7 @@ MCP server 通过 `agent-rag mcp --owner <id>` 启动，`--project <path>` 可�
 | `stats [--by-kind] [--by-source]` | 输出记录计数 |
 | `export --out <path>` | 把 store 中全部记录导出为 JSONL |
 | `import --in <path>` | 从 JSONL 按 id 幂等导入 |
-| `forget [--source <client>] [--dry-run] [--yes]` | 删除整个作用域，或按来源撤销记忆 |
+| `forget [--id <id>] [--source <client>] [--dry-run] [--yes]` | 删除整个作用域、按来源撤销，或按 id 删除单条记忆（`--id` 与 `--source` 互斥） |
 | `purge --expired [--dry-run] [--yes]` | 删除 `validTo` 已过期的记录（跨作用域） |
 
 ### `stats [--by-kind] [--by-source]`
@@ -313,14 +314,16 @@ agent-rag import --in ~/agent-rag-backup.jsonl
 
 ### `forget`
 
-两种模式：
+三种模式（`--id` 与 `--source` 互斥）：
 
-- **整域删除**（原有语义）：不带 `--source` 时，按 `--project` / `--project-id`
-  选择 project scope，否则删除 user scope；`--owner` 必填，实际删除需要
-  `--yes`；带 `--dry-run` 时只预览匹配条数，不写入。
+- **整域删除**（原有语义）：不带 `--id` / `--source` 时，按 `--project` /
+  `--project-id` 选择 project scope，否则删除 user scope；`--owner` 必填，
+  实际删除需要 `--yes`；带 `--dry-run` 时只预览匹配条数，不写入。
 - **按来源撤销**：带 `--source <client>` 时，删除 `source.client` 严格等于
   `<client>` 的全部记录，跨 user / project scope，不按 `owner` 或 `project`
   过滤。
+- **按 id 删除**：带 `--id <id>` 时，删除 id 严格等于 `<id>` 的单条记录。
+  id 全局唯一，因此不要求 `--owner`，也不按 `--project` 或 scope 过滤。
 
 按来源撤销时：
 
@@ -334,13 +337,26 @@ agent-rag import --in ~/agent-rag-backup.jsonl
 （JSON）。`matched` 是匹配条数，`deleted` 是实际删除条数；预览时
 `deleted` 为 0。
 
+按 id 删除时：
+
+- 未带 `--yes` 只预览，不写入；
+- `--dry-run` 即使同时带 `--yes` 也只预览，永不写入；
+- 只删除 id 完全相等的记录，其他记录保持不变；
+- 指定 id 不存在时打印 `memory not found: <id>` 并以退出码 1 结束；
+- 成功时输出 `{ "id": "...", "matched": 1, "deleted": 0|1, "dryRun": true|false }`
+  （JSON）。预览时 `deleted` 为 0。
+
 ```bash
-# 预览
+# 按来源预览 / 删除
 agent-rag forget --source wfxm
-# 实际删除
 agent-rag forget --source wfxm --yes
-# 显式 dry-run
+# 按来源显式 dry-run
 agent-rag forget --source wfxm --dry-run --yes
+# 按 id 预览 / 删除
+agent-rag forget --id mem_abc123
+agent-rag forget --id mem_abc123 --yes
+# 按 id 显式 dry-run
+agent-rag forget --id mem_abc123 --dry-run --yes
 ```
 
 ### `purge --expired`

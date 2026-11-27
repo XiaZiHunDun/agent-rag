@@ -90,6 +90,127 @@ function memoryFile(dataDir: string): string {
   return join(dataDir, "memory.json")
 }
 
+test("forget --id deletes exactly one record and keeps every other record", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "agent-rag-cli-forget-id-"))
+  try {
+    const dataDir = join(dir, "data")
+    await seed(dataDir, mixedRecords())
+
+    const result = runCli("forget", "--data-dir", dataDir, "--id", "user-target", "--yes")
+    assert.equal(result.status, 0, result.stderr)
+    assert.deepEqual(JSON.parse(result.stdout), {
+      id: "user-target",
+      matched: 1,
+      deleted: 1,
+      dryRun: false,
+    })
+    assert.deepEqual(await storedIds(dataDir), [
+      "manual-no-client",
+      "other-source",
+      "project-target",
+    ])
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test("forget --id with an unknown id prints a message and exits 1", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "agent-rag-cli-forget-id-missing-"))
+  try {
+    const dataDir = join(dir, "data")
+    await seed(dataDir, mixedRecords())
+    const before = readFileSync(memoryFile(dataDir), "utf8")
+
+    const result = runCli("forget", "--data-dir", dataDir, "--id", "missing-id", "--yes")
+    assert.equal(result.status, 1)
+    assert.match(result.stderr, /memory not found: missing-id/)
+    assert.equal(readFileSync(memoryFile(dataDir), "utf8"), before)
+    assert.deepEqual(await storedIds(dataDir), [
+      "manual-no-client",
+      "other-source",
+      "project-target",
+      "user-target",
+    ])
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test("forget --id without --yes previews and does not delete", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "agent-rag-cli-forget-id-preview-"))
+  try {
+    const dataDir = join(dir, "data")
+    await seed(dataDir, mixedRecords())
+    const before = readFileSync(memoryFile(dataDir), "utf8")
+
+    const result = runCli("forget", "--data-dir", dataDir, "--id", "project-target")
+    assert.equal(result.status, 0, result.stderr)
+    assert.deepEqual(JSON.parse(result.stdout), {
+      id: "project-target",
+      matched: 1,
+      deleted: 0,
+      dryRun: true,
+    })
+    assert.equal(readFileSync(memoryFile(dataDir), "utf8"), before)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test("forget --id --dry-run does not write even with --yes", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "agent-rag-cli-forget-id-dry-run-"))
+  try {
+    const dataDir = join(dir, "data")
+    await seed(dataDir, mixedRecords())
+    const before = readFileSync(memoryFile(dataDir), "utf8")
+
+    const result = runCli(
+      "forget",
+      "--data-dir",
+      dataDir,
+      "--id",
+      "project-target",
+      "--dry-run",
+      "--yes",
+    )
+    assert.equal(result.status, 0, result.stderr)
+    assert.deepEqual(JSON.parse(result.stdout), {
+      id: "project-target",
+      matched: 1,
+      deleted: 0,
+      dryRun: true,
+    })
+    assert.equal(readFileSync(memoryFile(dataDir), "utf8"), before)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test("forget rejects --id combined with --source", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "agent-rag-cli-forget-id-source-"))
+  try {
+    const dataDir = join(dir, "data")
+    await seed(dataDir, mixedRecords())
+    const before = readFileSync(memoryFile(dataDir), "utf8")
+
+    const result = runCli(
+      "forget",
+      "--data-dir",
+      dataDir,
+      "--id",
+      "user-target",
+      "--source",
+      "wfxm",
+      "--yes",
+    )
+    assert.equal(result.status, 1)
+    assert.match(result.stderr, /either --id or --source/)
+    assert.equal(readFileSync(memoryFile(dataDir), "utf8"), before)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 test("forget --source deletes only matching source.client records across user and project", async () => {
   const dir = mkdtempSync(join(tmpdir(), "agent-rag-cli-forget-source-"))
   try {

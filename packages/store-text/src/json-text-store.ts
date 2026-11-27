@@ -73,6 +73,8 @@ export class JsonTextStore implements TextMemoryStore {
   }
 
   async delete(id: string): Promise<void> {
+    const existing = await this.inner.get(id)
+    if (!existing) return
     await this.inner.delete(id)
     await this.commit()
   }
