@@ -245,6 +245,7 @@ MCP server 通过 `agent-rag mcp --owner <id>` 启动，`--project <path>` 可�
 | `export --out <path>` | 把 store 中全部记录导出为 JSONL |
 | `import --in <path>` | 从 JSONL 按 id 幂等导入 |
 | `forget [--source <client>] [--dry-run] [--yes]` | 删除整个作用域，或按来源撤销记忆 |
+| `purge --expired [--dry-run] [--yes]` | 删除 `validTo` 已过期的记录（跨作用域） |
 
 ### `export --out <path>`
 
@@ -312,4 +313,27 @@ agent-rag forget --source wfxm
 agent-rag forget --source wfxm --yes
 # 显式 dry-run
 agent-rag forget --source wfxm --dry-run --yes
+```
+
+### `purge --expired`
+
+维护命令，用于清理已经过期的记忆：删除 `validTo` 早于或等于当前时间的记录，
+**不区分 user / project scope**，也不按 `owner` 或 `project` 过滤。
+
+- `--expired` 必填；未带该选项时命令报错并以非 0 退出。
+- 未带 `--yes` 时只预览匹配/删除条数，不写入。
+- `--dry-run` 即使同时带 `--yes` 也只预览，永不写入。
+- 没有 `validTo` 的记录和尚未过期的记录都会保留。
+- 没有匹配记录时输出 `matched: 0`、`deleted: 0`，退出码仍为 0。
+
+成功时输出 `{ "matched": N, "deleted": M, "dryRun": true|false }`（JSON）。
+`matched` 是匹配条数，`deleted` 是实际删除条数；预览时 `deleted` 为 0。
+
+```bash
+# 预览
+agent-rag purge --expired
+# 实际删除
+agent-rag purge --expired --yes
+# 显式 dry-run
+agent-rag purge --expired --dry-run --yes
 ```
