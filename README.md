@@ -96,6 +96,8 @@ node packages/server/src/cli.ts mcp \
 
 ### 命令行
 
+CLI 命令一览见 docs/api.md。
+
 ```bash
 agent-rag resolve --remote-url git@github.com:owner/repo.git
 agent-rag remember --owner user_me --kind preference --title 回复风格 --text "先结论，后细节。"
