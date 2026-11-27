@@ -260,6 +260,11 @@ export class PostgresTextStore implements TextMemoryStore {
       .slice(0, limit)
   }
 
+  async listAll(): Promise<readonly MemoryRecord[]> {
+    const result = await this.client.query<MemoryRow>(`SELECT * FROM ${TABLE} ORDER BY id`)
+    return result.rows.map(rowToRecord)
+  }
+
   async stats(): Promise<MemoryStoreStats> {
     const result = await this.client.query<{
       scope: string

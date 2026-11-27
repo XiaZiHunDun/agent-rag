@@ -59,6 +59,10 @@ test("round-trips a record through Postgres", async () => {
   assert.equal(loaded?.title, "端口配置")
   assert.deepEqual(loaded?.tags, ["config"])
   assert.deepEqual(loaded?.facts, {})
+
+  const all = await store.listAll()
+  assert.equal(all.length, 1)
+  assert.equal(all[0]?.id, "a")
 })
 
 test("searches Chinese and keeps project scope isolated", async () => {

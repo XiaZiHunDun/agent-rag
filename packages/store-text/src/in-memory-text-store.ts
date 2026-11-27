@@ -104,6 +104,10 @@ export class InMemoryTextStore implements TextMemoryStore {
       .slice(0, limit)
   }
 
+  async listAll(): Promise<readonly MemoryRecord[]> {
+    return this.snapshot()
+  }
+
   async stats(): Promise<MemoryStoreStats> {
     const byScope: Record<string, number> = {}
     const byKind: Record<string, number> = {}

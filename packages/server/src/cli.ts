@@ -1,7 +1,9 @@
+import { open, readFile, writeFile } from "node:fs/promises"
 import { parseArgs } from "node:util"
 import { AgentRagHttpClient, collectInjection } from "@agent-rag/client"
 import type { MemoryKind } from "@agent-rag/core"
 import { createHttpServer } from "./http-server.ts"
+import { parseMemoryJsonl, serializeMemoryJsonl } from "./memory-jsonl.ts"
 import { runMcpServer } from "./mcp-server.ts"
 import { enrichProjectLocator } from "./project-discovery.ts"
 import { AgentRagService } from "./service.ts"
@@ -34,6 +36,9 @@ interface CliValues {
   readonly sensitivity?: string
   readonly tag?: string[]
   readonly "by-kind"?: boolean
+  readonly out?: string
+  readonly in?: string
+  readonly force?: boolean
   readonly yes?: boolean
   readonly help?: boolean
 }
@@ -53,6 +58,8 @@ Commands:
   forget                  Delete a whole scope (requires --yes)
   resolve                 Resolve a project locator to a stable projectId
   stats                   Print record counts by scope
+  export --out <path>     Export all memory records as JSONL
+  import --in <path>      Import memory records from a JSONL file
 
 Common options:
   --owner <id>            Canonical user id (or AGENT_RAG_OWNER_ID)
@@ -87,12 +94,23 @@ remember options:
 stats options:
   --by-kind               Include per-kind record counts
 
+export options:
+  --out <path>            Destination JSONL file (required)
+  --force                 Overwrite the destination if it already exists
+
+import options:
+  --in <path>             Source JSONL file (required)
+                          Records are upserted by id; an invalid line aborts
+                          the whole import without writing anything.
+
 Examples:
   agent-rag mcp --owner user_me --project ~/projects/agent-rag
   agent-rag mcp --remote http://127.0.0.1:8787 --project ~/projects/agent-rag
   agent-rag serve --owner user_me --port 8787
   agent-rag inject --owner user_me --project . --goal "修复登录超时"
   agent-rag resolve --remote-url git@github.com:owner/repo.git
+  agent-rag export --out ~/agent-rag-backup.jsonl
+  agent-rag import --in ~/agent-rag-backup.jsonl
 `
 
 function requireOwner(values: CliValues): string {
@@ -247,6 +265,48 @@ async function commandStats(values: CliValues): Promise<void> {
   console.log(JSON.stringify(output, null, 2))
 }
 
+async function commandExport(values: CliValues): Promise<void> {
+  if (!values.out) {
+    throw new Error("export requires --out <path>")
+  }
+  const stores = await loadStores(values)
+  const records = await stores.store.listAll()
+  const content = serializeMemoryJsonl(records)
+
+  if (values.force) {
+    await writeFile(values.out, content, "utf8")
+  } else {
+    try {
+      const handle = await open(values.out, "wx")
+      try {
+        await handle.writeFile(content, "utf8")
+      } finally {
+        await handle.close()
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+        throw new Error(`refusing to overwrite existing file: ${values.out} (use --force)`)
+      }
+      throw error
+    }
+  }
+
+  console.log(JSON.stringify({ exported: records.length, out: values.out }, null, 2))
+}
+
+async function commandImport(values: CliValues): Promise<void> {
+  if (!values.in) {
+    throw new Error("import requires --in <path>")
+  }
+  const content = await readFile(values.in, "utf8")
+  // Parse and validate the whole file before opening the store or writing
+  // anything, so a bad line leaves the target store untouched.
+  const records = parseMemoryJsonl(content)
+  const stores = await loadStores(values)
+  await stores.store.upsertMany(records)
+  console.log(JSON.stringify({ imported: records.length, in: values.in }, null, 2))
+}
+
 async function commandRecall(values: CliValues, positionals: readonly string[]): Promise<void> {
   const ownerId = requireOwner(values)
   const stores = await loadStores(values)
@@ -364,6 +424,9 @@ async function main(): Promise<void> {
       sensitivity: { type: "string" },
       tag: { type: "string", multiple: true },
       "by-kind": { type: "boolean" },
+      out: { type: "string" },
+      in: { type: "string" },
+      force: { type: "boolean" },
       yes: { type: "boolean" },
       help: { type: "boolean" },
     },
@@ -387,6 +450,12 @@ async function main(): Promise<void> {
       return
     case "stats":
       await commandStats(cliValues)
+      return
+    case "export":
+      await commandExport(cliValues)
+      return
+    case "import":
+      await commandImport(cliValues)
       return
     case "recall":
       await commandRecall(cliValues, positionals)

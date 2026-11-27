@@ -41,6 +41,7 @@ test("persists records and reloads the search index", async () => {
 
   const second = await JsonTextStore.open(file)
   assert.equal((await second.stats()).total, 2)
+  assert.equal((await second.listAll()).length, 2)
   const hits = await second.search({
     scope: { scope: "project", ownerId: "user-1", projectId: "proj-1" },
     text: "端口",

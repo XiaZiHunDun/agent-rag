@@ -43,6 +43,14 @@ export interface TextMemoryStore {
   /** Returns the number of deleted records. */
   deleteScope(scope: MemoryScopeRef): Promise<number>
   search(query: MemoryQuery): Promise<readonly MemoryHit[]>
+  /**
+   * Return every stored record regardless of scope, sensitivity or expiry.
+   *
+   * Intended for backup/export; it must not be used for retrieval because it
+   * bypasses scope isolation. Implementations should return records sorted by
+   * id so exports are deterministic.
+   */
+  listAll(): Promise<readonly MemoryRecord[]>
   stats(): Promise<MemoryStoreStats>
 }
 
