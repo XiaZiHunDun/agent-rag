@@ -337,3 +337,44 @@ agent-rag purge --expired --yes
 # 显式 dry-run
 agent-rag purge --expired --dry-run --yes
 ```
+
+### export / import 快速示例
+
+三条常用命令：
+
+```bash
+# 1) 导出全部记录（目标文件不存在时创建）
+agent-rag export --out ~/agent-rag-backup.jsonl
+
+# 2) 从备份按 id 幂等导入（先整批校验，失败则不写入）
+agent-rag import --in ~/agent-rag-backup.jsonl
+
+# 3) 目标文件已存在时显式覆盖（注意：--force 只属于 export）
+agent-rag export --out ~/agent-rag-backup.jsonl --force
+```
+
+命令成功时分别输出 `{ "exported": N, "out": "..." }` 与
+`{ "imported": N, "in": "..." }`（JSON）。
+
+JSONL 每一行是一个完整的 `MemoryRecord` JSON 对象：记录按 `id` 排序，一行一条，
+文件以换行结尾。每行的关键字段：
+
+| 字段 | 说明 |
+| --- | --- |
+| `id` | 记录唯一 id；导入时按它幂等 upsert，相同 `id` 只更新同一条 |
+| `schemaVersion` | 记录结构版本，当前固定为 `1` |
+| `scope` | `user` 或 `project` |
+| `ownerId` | 所属用户；project scope 下为工作区/租户 owner |
+| `projectId` | project scope 必填；user scope 必须省略 |
+| `kind` | `profile` / `preference` / `relationship` / `commitment` / `decision` / `convention` / `recipe` / `issue` / `task_summary` / `note` |
+| `title` / `text` | 标题（≤200 字符）与可检索正文（≤20000 字符） |
+| `source` | 来源对象，至少含 `kind`、`ref`，可选 `client`、`version`、`excerpt` |
+| `confidence` | 0..1 的置信度 |
+| `sensitivity` | `normal` / `private` / `secret` |
+| `createdAt` / `updatedAt` | ISO 时间 |
+| `validFrom` / `validTo` | 可选有效期（ISO 时间） |
+| `facts` / `tags` / `supersedes` / `checksum` | 可选：结构化槽位、标签、被替代记录 id、内容校验和 |
+
+导入时每行都必须是完整合法记录：空行忽略；任意一行非法（JSON 解析失败或字段
+校验失败）会以 `第 N 行: 原因` 报错并以非 0 退出，**整批不写入**。导入不按
+`--owner` 过滤，备份中的 `ownerId` / `projectId` 原样保留，便于跨机器迁移。
