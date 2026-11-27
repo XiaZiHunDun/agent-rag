@@ -1,0 +1,40 @@
+# dsh profile overlay: connect agent-rag over the shared HTTP service.
+#
+# Remote mode keeps no local memory snapshot in the assistant process; every
+# tool call is forwarded to one `agent-rag serve` instance, so all assistants
+# share a single writer and see each other's writes.
+#
+# Usage (from the target repository):
+#   AGENT_RAG_TOKEN=... dsh --profile headless \
+#     --patch /path/to/agent-rag/integrations/dsh-wfxm/mcp-remote.patch.yml --json -
+#
+# The MCP client exposes tools as mcp__agent_rag__<tool>. Environment overrides:
+#   AGENT_RAG_REMOTE    shared service base URL (default http://127.0.0.1:8787)
+#   AGENT_RAG_TOKEN     service token; required when serve runs with --token
+#   AGENT_RAG_OWNER_ID  canonical user id (default user_xiazihundun)
+#   AGENT_RAG_CLIENT    assistant label recorded on writes (default dsh-wfxm)
+#   AGENT_RAG_ROOT      repository root used to resolve the project
+#                       (default /home/ailearn/projects/agent-rag)
+- insert:
+    - id: mcp-agent-rag
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: agent_rag
+        transport: stdio
+        command: node
+        args:
+          - !!js '`${process.env.AGENT_RAG_ROOT ?? "/home/ailearn/projects/agent-rag"}/packages/server/src/cli.ts`'
+          - mcp
+          - --remote
+          - !!js 'process.env.AGENT_RAG_REMOTE ?? "http://127.0.0.1:8787"'
+          - --owner
+          - !!js 'process.env.AGENT_RAG_OWNER_ID ?? "user_xiazihundun"'
+          - --client
+          - !!js 'process.env.AGENT_RAG_CLIENT ?? "dsh-wfxm"'
+          - --project
+          - !!js 'process.env.AGENT_RAG_ROOT ?? "/home/ailearn/projects/agent-rag"'
+        cwd: !!js 'process.env.AGENT_RAG_ROOT ?? "/home/ailearn/projects/agent-rag"'
+        env:
+          AGENT_RAG_TOKEN: !!js 'process.env.AGENT_RAG_TOKEN ?? ""'
+        toolCallTimeoutMs: 20000
+        failOnStartupError: true
