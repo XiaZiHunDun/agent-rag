@@ -43,7 +43,7 @@ Usage:
   agent-rag <command> [options]
 
 Commands:
-  version                 Print the CLI version (also --version)
+  version [--json]        Print the CLI version (also --version)
   mcp                     Run an MCP stdio server (for dsh-wfxm, IDE agents)
   serve                   Run the HTTP JSON API server
   inject                  Print an injectable memory block for a goal
@@ -322,7 +322,11 @@ async function main(): Promise<void> {
   }
 
   if (command === "version" || command === "--version") {
-    console.log(VERSION)
+    if (argv.slice(1).includes("--json")) {
+      console.log(JSON.stringify({ name: "agent-rag", version: VERSION }))
+    } else {
+      console.log(VERSION)
+    }
     return
   }
 

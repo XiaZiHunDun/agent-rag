@@ -26,6 +26,12 @@ test("--version prints the package version", () => {
   assert.match(result.stdout, /\b0\.1\.0\b/)
 })
 
+test("version --json prints name and version as JSON", () => {
+  const result = runCli("version", "--json")
+  assert.equal(result.status, 0)
+  assert.deepEqual(JSON.parse(result.stdout), { name: "agent-rag", version: "0.1.0" })
+})
+
 test("unknown command exits non-zero", () => {
   const result = runCli("definitely-not-a-command")
   assert.notEqual(result.status, 0)
