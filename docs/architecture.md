@@ -175,7 +175,7 @@ retireSupersededRecords                  # 关闭被取代记录的 validTo
 
 - **本地单用户**：`JsonTextStore`（原子写、启动重建索引），`projects.json` 保存项目身份。
 - **共享/多用户**：`PostgresTextStore`（tokenized `tsvector` + `simple` 配置，中文二元组可用），直接复用现有连接池。
-- **后续**：SQLite FTS5 适配、embedding 向量召回与 rerank（在不改变 `TextMemoryStore` 契约的前提下加混合检索层）、按来源撤销。
+- **后续**：SQLite FTS5 适配、embedding 向量召回与 rerank（在不改变 `TextMemoryStore` 契约的前提下加混合检索层）。
 
 `TextMemoryStore` 契约（upsert/get/delete/deleteScope/search/listAll/stats）是存储可替换的边界。
 `listAll` 只供备份/导出使用，绕过作用域过滤；召回仍必须走 `search(scope)`。
@@ -271,3 +271,4 @@ agent-rag import --in ~/agent-rag-backup.jsonl
 - `MEMORY_SCHEMA_VERSION = 1`。新增可选字段属于兼容变更；删除/改语义需升版本并提供迁移脚本。
 - 当前 0.1.0 的能力边界：文本检索、单用户、任务/会话两类投影、MCP/HTTP/嵌入式三种接入。
 - 已知限制：画像记录按会话覆盖（应由助手产出累积画像）；中文检索为字/二元组近似，未做分词；未实现多用户鉴权与审计日志。
+- 已交付的维护能力：`stats --by-source`、`purge --expired`、`export/import`、`forget --source`。
