@@ -141,7 +141,7 @@ dsh-wfxm（/home/u/agent-rag）┘
 
 ## 状态
 
-当前 `0.1.0`：文本检索、单用户、任务/会话投影、MCP/HTTP/嵌入式接入已可用。后续计划：向量混合检索与 rerank、SQLite FTS5 适配、导出/导入、多用户鉴权与审计。
+当前 `0.1.0`：文本检索、单用户、任务/会话投影、MCP/HTTP/嵌入式接入已可用；维护能力已交付 `stats --by-source`、`purge --expired`、`export/import`、`forget --source`。后续计划：向量混合检索与 rerank、SQLite FTS5 适配、多用户鉴权与审计。
 
 ## License
 
