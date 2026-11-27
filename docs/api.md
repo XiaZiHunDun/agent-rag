@@ -422,3 +422,54 @@ JSONL 每一行是一个完整的 `MemoryRecord` JSON 对象：记录按 `id` �
 导入时每行都必须是完整合法记录：空行忽略；任意一行非法（JSON 解析失败或字段
 校验失败）会以 `第 N 行: 原因` 报错并以非 0 退出，**整批不写入**。导入不按
 `--owner` 过滤，备份中的 `ownerId` / `projectId` 原样保留，便于跨机器迁移。
+
+## 错误码与排查
+
+### 退出码
+
+CLI 进程的退出码约定如下：
+
+| 退出码 | 含义 |
+| --- | --- |
+| `0` | 成功。命令正常完成；未带 `--yes` 或带 `--dry-run` 的预览类命令也属于成功。 |
+| `1` | 执行失败。CLI 捕获到错误后，在 stderr 以 `[agent-rag] ` 前缀输出原因，并把退出码置为 1。参数缺失/非法、未知命令、记录不存在、JSONL 校验失败、文件或目录无权限等目前都归入这一档。 |
+| `2` | 用法错误（预留档位）。约定用于未知命令、未知选项、缺少必填参数等“调用方式不对”的情况，便于脚本把它和运行期失败区分开。 |
+
+> 当前 `0.1.0` 实现中，用法错误与运行期错误一样由入口的 `main().catch` 统一设为
+> 退出码 `1`，`2` 这一档尚未启用。脚本若需要严格区分两类失败，请同时检查 stderr
+> 文本（例如 `unknown command:`、`Unknown option` 等）。
+
+### 常见错误信息
+
+除 `version`、`--help` 等直接输出到 stdout 的命令外，错误信息统一写到 stderr，
+格式为 `[agent-rag] <原因>`。下表按常见程度列出：
+
+| 错误信息（stderr） | 常见原因 | 排查 / 处理 |
+| --- | --- | --- |
+| `memory not found: <id>` | `forget --id <id>` 指定的记录不存在。 | id 全局唯一，先确认 id 没有多余空白；再用 `agent-rag stats` 或 `agent-rag export --out <path>` 核对记录是否在预期的 store 中。注意 `--data-dir`、`--store`、`AGENT_RAG_HOME` 是否指向同一份数据。 |
+| `第 N 行: <原因>`（invalid JSONL） | `import --in <path>` 的 JSONL 第 N 行不是合法 JSON，或缺少/写错必填字段。 | N 是原始文件中的 1-based 行号，空行会被跳过但行号仍按原文件计算。修正该行，或重新 `export` 生成备份后再导入。校验在写入前完成，失败时整批不写入。 |
+| `EACCES: permission denied, open '<path>'` | 数据目录、导出目标或导入源文件没有读写权限。 | 检查路径属主与权限（`ls -l`、`namei -l <path>`）；确保 CLI 运行用户与数据目录属主一致，避免用 `sudo` 运行后留下 root 属主的文件；必要时修正 `chmod` / `chown`。 |
+| `refusing to overwrite existing file: <path> (use --force)` | `export --out` 的目标文件已存在。 | 换一个输出路径，或确认后加 `--force` 覆盖；`--force` 只属于 `export`。 |
+| `owner is required: pass --owner <id> or set AGENT_RAG_OWNER_ID` | 命令需要 owner，但没有传 `--owner`。 | 补 `--owner <id>`，或设置 `AGENT_RAG_OWNER_ID`；多助手复用时所有助手应使用同一个 owner。 |
+| `unknown command: <cmd>` | 子命令拼写错误，或把选项放在了命令位置。 | `agent-rag --help` 查看命令列表；命令必须是第一个参数，例如 `agent-rag stats --by-source`。 |
+| `Unknown option '--x'` / `Option '--x' argument missing` | 选项名拼错，或需要值的选项没有跟值。 | 对照 `agent-rag --help`；含空格的值要加引号；以 `-` 开头的参数可放在 `--` 之后作为位置参数。 |
+| `export requires --out <path>` / `import requires --in <path>` / `purge requires --expired` | 缺少该子命令的必填选项。 | 补齐对应选项；`forget` 未带 `--id` / `--source` 时按整域删除处理，需要 `--owner` 与 `--yes`。 |
+| `forget accepts either --id or --source, not both` | 同时传了互斥选项。 | 按 id 删单条用 `--id`，按来源撤销用 `--source`，二选一。 |
+| `refusing to delete memory without --yes` | 整域删除未带确认。 | 先用 `--dry-run` 预览匹配条数，确认后加 `--yes`。 |
+
+### 排查顺序
+
+1. **看 stderr 与退出码**：先读 `[agent-rag]` 开头的那一行；不要只看 stdout，
+   很多错误不会输出 JSON。
+2. **确认作用域**：检查 `--owner`、`--project` / `--project-id` 是否与写入时一致；
+   项目记忆为空时先用 `agent-rag resolve` 核对 `projectId`。
+3. **确认数据位置**：默认 `~/.agent-rag/`，`--data-dir` 与 `AGENT_RAG_HOME` 可覆盖；
+   `--store memory` 是进程内存储，进程结束即丢失，排查“写完就没了”时先确认是否
+   误用了内存 store。
+4. **先备份再导入/删除**：`export --out` 生成 JSONL 备份；`import` 按 id 幂等，
+   非法行会让整批回滚；`forget` / `purge` 先用 `--dry-run` 预览，再加 `--yes`。
+5. **HTTP 侧看状态码**：`400` 参数/记录校验失败、`401` token 缺失或错误、`404`
+   路径不存在、`405` 方法不支持、`413` 请求体超过 1 MB、`500` 内部错误（详情只写
+   服务端日志）。HTTP 响应体形如 `{ "error": "message" }`。
+6. **MCP 侧不要污染 stdout**：MCP 模式下 stdout 只跑协议，日志和错误都走 stderr；
+   自定义调试输出请用 `console.error`，否则会出现“无响应/协议错乱”。
