@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdtempSync, rmSync } from "node:fs"
+import { mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, test } from "node:test"
@@ -63,6 +63,39 @@ test("deleteScope persists the removal", async () => {
 
   const reopened = await JsonTextStore.open(file)
   assert.equal((await reopened.stats()).total, 0)
+})
+
+test("delete removes and persists only the target id", async () => {
+  const store = await JsonTextStore.open(file)
+  await store.upsertMany([
+    record("a", "A", "alpha"),
+    record("b", "B", "beta"),
+    record("c", "C", "gamma"),
+  ])
+
+  await store.delete("a")
+  assert.equal(await store.get("a"), null)
+  assert.equal((await store.get("b"))?.id, "b")
+  assert.equal((await store.get("c"))?.id, "c")
+
+  const reopened = await JsonTextStore.open(file)
+  assert.deepEqual(
+    (await reopened.listAll()).map((item) => item.id),
+    ["b", "c"],
+  )
+})
+
+test("deleting an unknown id leaves the JSON file untouched", async () => {
+  const store = await JsonTextStore.open(file)
+  await store.upsertMany([record("a", "A", "alpha")])
+  const before = readFileSync(file, "utf8")
+
+  await store.delete("missing")
+  assert.equal(readFileSync(file, "utf8"), before)
+  assert.deepEqual(
+    (await store.listAll()).map((item) => item.id),
+    ["a"],
+  )
 })
 
 test("stats count records by kind and source after reload", async () => {

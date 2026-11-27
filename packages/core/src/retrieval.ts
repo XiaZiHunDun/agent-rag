@@ -44,6 +44,7 @@ export interface TextMemoryStore {
   upsert(record: MemoryRecord): Promise<void>
   upsertMany(records: readonly MemoryRecord[]): Promise<void>
   get(id: string): Promise<MemoryRecord | null>
+  /** Delete one record by id. Deleting an unknown id is a no-op. */
   delete(id: string): Promise<void>
   /** Returns the number of deleted records. */
   deleteScope(scope: MemoryScopeRef): Promise<number>

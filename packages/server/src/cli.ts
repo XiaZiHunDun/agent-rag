@@ -39,6 +39,7 @@ interface CliValues {
   readonly "by-source"?: boolean
   readonly out?: string
   readonly in?: string
+  readonly id?: string
   readonly source?: string
   readonly force?: boolean
   readonly expired?: boolean
@@ -59,7 +60,7 @@ Commands:
   inject                  Print an injectable memory block for a goal
   recall [query]          Search memory and print hits as JSON
   remember                Save one durable fact
-  forget                  Delete a whole scope or all memory from one source
+  forget                  Delete a whole scope, one source, or one id
   purge --expired         Delete every record whose validTo has passed
   resolve                 Resolve a project locator to a stable projectId
   stats                   Print record counts by scope, kind or source
@@ -102,12 +103,14 @@ stats options:
                           without source.client are counted as unknown
 
 forget options:
+  --id <id>               Delete exactly one record by id, regardless of scope
   --source <client>       Delete every record whose source.client matches,
                           across user and project scopes
   --dry-run               Preview the matched/deleted counts; never writes
   --yes                   Required to actually delete
-  Without --source, deletes the current scope: project when --project or
-  --project-id is given, otherwise the user scope.
+  --id and --source are mutually exclusive. Without either, deletes the
+  current scope: project when --project or --project-id is given, otherwise
+  the user scope.
 
 purge options:
   --expired               Required; select records whose validTo has passed
@@ -132,6 +135,7 @@ Examples:
   agent-rag resolve --remote-url git@github.com:owner/repo.git
   agent-rag forget --owner user_me --project . --yes
   agent-rag forget --source wfxm --yes
+  agent-rag forget --id mem_abc123 --yes
   agent-rag stats --by-kind --by-source
   agent-rag purge --expired --dry-run
   agent-rag purge --expired --yes
@@ -397,6 +401,32 @@ async function commandRemember(values: CliValues): Promise<void> {
   console.log(JSON.stringify(record, null, 2))
 }
 
+async function commandForgetById(values: CliValues, rawId: string): Promise<void> {
+  const id = rawId.trim()
+  if (!id) {
+    throw new Error("forget --id requires a non-empty id")
+  }
+
+  const stores = await loadStores(values)
+  const record = await stores.store.get(id)
+  if (!record) {
+    console.error(`[agent-rag] memory not found: ${id}`)
+    process.exitCode = 1
+    return
+  }
+
+  // Like the other forget modes: preview unless --yes is present, and
+  // --dry-run always wins so an explicit dry-run can never write.
+  const dryRun = values["dry-run"] === true || values.yes !== true
+  let deleted = 0
+  if (!dryRun) {
+    await stores.store.delete(id)
+    deleted = 1
+  }
+
+  console.log(JSON.stringify({ id, matched: 1, deleted, dryRun }, null, 2))
+}
+
 async function commandForgetBySource(values: CliValues, source: string): Promise<void> {
   const client = source.trim()
   if (!client) {
@@ -448,6 +478,13 @@ async function commandPurge(values: CliValues): Promise<void> {
 }
 
 async function commandForget(values: CliValues): Promise<void> {
+  if (values.id !== undefined && values.source !== undefined) {
+    throw new Error("forget accepts either --id or --source, not both")
+  }
+  if (values.id !== undefined) {
+    await commandForgetById(values, values.id)
+    return
+  }
   if (values.source !== undefined) {
     await commandForgetBySource(values, values.source)
     return
@@ -530,6 +567,7 @@ async function main(): Promise<void> {
       "by-source": { type: "boolean" },
       out: { type: "string" },
       in: { type: "string" },
+      id: { type: "string" },
       source: { type: "string" },
       force: { type: "boolean" },
       expired: { type: "boolean" },
