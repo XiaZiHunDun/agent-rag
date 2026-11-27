@@ -9,7 +9,7 @@ agent-rag 支持三种接入方式，同一份数据可同时被多个助手读�
 | `ownerId` | 所有助手配置同一个稳定 id，如 `user_me`；这是跨助手复用用户记忆的关键 |
 | `client` | 各助手填入自己的名字（`wfxm`、`dsh-wfxm`、`cli`），写入记录会带 `source.client` |
 | 项目 | 优先传 `remoteUrl`；只传 `localPath` 时服务端会读取 `.git/config` 的 origin |
-| 数据目录 | 共享同一台机器时所有助手指向同一个 `--data-dir`；跨机用 HTTP 模式 |
+| 数据目录 | 多助手共用时只让一个 `serve` 持有 `--data-dir`，其余助手一律 `mcp --remote`；stdio MCP 各持独立快照，共写同一目录会互相覆盖 |
 
 ## 1. 嵌入式（WFXM 现有方式）
 
