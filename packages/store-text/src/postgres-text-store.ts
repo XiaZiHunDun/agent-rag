@@ -271,14 +271,19 @@ export class PostgresTextStore implements TextMemoryStore {
       owner_id: string
       project_id: string
       kind: string
+      source_client: string
       count: string | number
     }>(
-      `SELECT scope, owner_id, project_id, kind, COUNT(*) AS count
+      `SELECT scope, owner_id, project_id, kind,
+              COALESCE(NULLIF(BTRIM(source->>'client'), ''), 'unknown') AS source_client,
+              COUNT(*) AS count
        FROM ${TABLE}
-       GROUP BY scope, owner_id, project_id, kind`,
+       GROUP BY scope, owner_id, project_id, kind,
+                COALESCE(NULLIF(BTRIM(source->>'client'), ''), 'unknown')`,
     )
     const byScope: Record<string, number> = {}
     const byKind: Record<string, number> = {}
+    const bySource: Record<string, number> = {}
     let total = 0
     for (const row of result.rows) {
       const count = Number(row.count)
@@ -290,8 +295,9 @@ export class PostgresTextStore implements TextMemoryStore {
       })
       byScope[key] = (byScope[key] ?? 0) + count
       byKind[row.kind] = (byKind[row.kind] ?? 0) + count
+      bySource[row.source_client] = (bySource[row.source_client] ?? 0) + count
     }
-    return { total, byScope, byKind }
+    return { total, byScope, byKind, bySource }
   }
 
   private async init(): Promise<void> {

@@ -32,6 +32,11 @@ export interface MemoryStoreStats {
   readonly byScope: Readonly<Record<string, number>>
   /** Per-kind counts; optional for stores that cannot provide them. */
   readonly byKind?: Readonly<Record<string, number>>
+  /**
+   * Per-source counts keyed by `source.client`; records without a client are
+   * grouped under `"unknown"`. Optional for stores that cannot provide them.
+   */
+  readonly bySource?: Readonly<Record<string, number>>
 }
 
 /** Common contract implemented by text stores (in-memory, SQLite FTS, Postgres). */

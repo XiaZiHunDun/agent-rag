@@ -65,7 +65,7 @@ test("deleteScope persists the removal", async () => {
   assert.equal((await reopened.stats()).total, 0)
 })
 
-test("stats count records by kind after reload", async () => {
+test("stats count records by kind and source after reload", async () => {
   const store = await JsonTextStore.open(file)
   await store.upsertMany([
     record("a", "A", "alpha", "note"),
@@ -76,4 +76,5 @@ test("stats count records by kind after reload", async () => {
   const stats = await (await JsonTextStore.open(file)).stats()
   assert.equal(stats.total, 3)
   assert.deepEqual(stats.byKind, { note: 1, decision: 2 })
+  assert.deepEqual(stats.bySource, { unknown: 3 })
 })
