@@ -42,6 +42,7 @@ Usage:
   agent-rag <command> [options]
 
 Commands:
+  version                 Print the CLI version (also --version)
   mcp                     Run an MCP stdio server (for dsh-wfxm, IDE agents)
   serve                   Run the HTTP JSON API server
   inject                  Print an injectable memory block for a goal
@@ -182,11 +183,13 @@ async function commandMcp(values: CliValues): Promise<void> {
 async function commandResolve(values: CliValues): Promise<void> {
   const stores = await loadStores(values)
   const localPath = values.path ?? values.project
-  const identity = await stores.registry.resolve({
-    ...(values["remote-url"] === undefined ? {} : { remoteUrl: values["remote-url"] }),
-    ...(localPath === undefined ? {} : { localPath }),
-    ...(values.name === undefined ? {} : { name: values.name }),
-  })
+  const identity = await stores.registry.resolve(
+    await enrichProjectLocator({
+      ...(values["remote-url"] === undefined ? {} : { remoteUrl: values["remote-url"] }),
+      ...(localPath === undefined ? {} : { localPath }),
+      ...(values.name === undefined ? {} : { name: values.name }),
+    }),
+  )
   console.log(JSON.stringify(identity, null, 2))
 }
 
@@ -272,6 +275,11 @@ async function main(): Promise<void> {
   const command = argv[0]
   if (!command || command === "help" || command === "--help" || command === "-h") {
     console.log(USAGE)
+    return
+  }
+
+  if (command === "version" || command === "--version") {
+    console.log(VERSION)
     return
   }
 

@@ -78,6 +78,8 @@ node /path/to/agent-rag/packages/server/src/cli.ts mcp \
 ```
 
 > `--project` 只影响默认项目；助手在处理其他仓库时可显式传 `project` 参数或调用 `project_resolve`。
+>
+> 仓库提供了可直接使用的 dsh headless overlay：[integrations/dsh-wfxm/mcp.patch.yml](../integrations/dsh-wfxm/mcp.patch.yml)，通过 `dsh --patch` 注入即可，无需修改全局 profile。
 
 助手侧推荐流程：
 

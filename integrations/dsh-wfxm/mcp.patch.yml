@@ -1,0 +1,34 @@
+# dsh headless profile overlay: connect agent-rag as an MCP server.
+#
+# Usage (from the target repository):
+#   DEEPSEEK_API_KEY=... dsh --profile headless \
+#     --patch /path/to/agent-rag/integrations/dsh-wfxm/mcp.patch.yml --json -
+#
+# The MCP client exposes tools as mcp__agent_rag__<tool>; the assistant is
+# expected to call memory_context at session start and memory_report_task at
+# the end. Environment overrides:
+#   AGENT_RAG_ROOT      repository root (default /home/ailearn/projects/agent-rag)
+#   AGENT_RAG_OWNER_ID  canonical user id (default user_xiazihundun)
+#   AGENT_RAG_CLIENT    assistant label recorded on writes (default dsh-wfxm)
+#   AGENT_RAG_DATA_DIR  shared memory directory (default /home/ailearn/.agent-rag)
+- insert:
+    - id: mcp-agent-rag
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: agent_rag
+        transport: stdio
+        command: node
+        args:
+          - !!js '`${process.env.AGENT_RAG_ROOT ?? "/home/ailearn/projects/agent-rag"}/packages/server/src/cli.ts`'
+          - mcp
+          - --owner
+          - !!js 'process.env.AGENT_RAG_OWNER_ID ?? "user_xiazihundun"'
+          - --client
+          - !!js 'process.env.AGENT_RAG_CLIENT ?? "dsh-wfxm"'
+          - --project
+          - !!js 'process.env.AGENT_RAG_ROOT ?? "/home/ailearn/projects/agent-rag"'
+          - --data-dir
+          - !!js 'process.env.AGENT_RAG_DATA_DIR ?? "/home/ailearn/.agent-rag"'
+        cwd: !!js 'process.env.AGENT_RAG_ROOT ?? "/home/ailearn/projects/agent-rag"'
+        toolCallTimeoutMs: 20000
+        failOnStartupError: true
