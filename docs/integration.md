@@ -166,7 +166,7 @@ stdio MCP 每个进程各持一份 JSON 快照：外部写入不可见，多个�
 - `--remote`（或 `AGENT_RAG_REMOTE`）：共享服务地址；设置后 MCP 不再读写本地 `--data-dir`。
 - `--token`（或 `AGENT_RAG_TOKEN`）：与服务端 `--token` 保持一致。
 - `--project`：先在本机读取 git origin，再向服务端解析 `projectId`，不同 clone 仍归一到同一项目。
-- `--data-dir` 只属于 `serve`；服务进程是唯一写入方。
+- `--remote` 模式下 `--data-dir` 不生效，数据目录由 `serve` 持有。
 
 ## 多端复用的工作机制
 
