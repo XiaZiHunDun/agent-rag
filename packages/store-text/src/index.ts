@@ -1,0 +1,7 @@
+export { TextIndex, tokenize } from "./text-index.ts"
+export type { TextSearchHit } from "./text-index.ts"
+export { InMemoryTextStore } from "./in-memory-text-store.ts"
+export { JsonTextStore } from "./json-text-store.ts"
+export { JsonProjectRegistry } from "./json-project-registry.ts"
+export { PostgresTextStore } from "./postgres-text-store.ts"
+export type { SqlClient } from "./postgres-text-store.ts"

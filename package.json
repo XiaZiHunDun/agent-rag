@@ -1,0 +1,20 @@
+{
+  "name": "agent-rag",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@8.15.9",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "test": "node --experimental-strip-types --test packages/core/test/*.test.ts packages/store-text/test/*.test.ts packages/projectors/test/*.test.ts packages/client/test/*.test.ts packages/adapters/test/*.test.ts packages/server/test/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "serve": "node packages/server/src/cli.ts serve",
+    "mcp": "node packages/server/src/cli.ts mcp"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "typescript": "^5.9.3"
+  }
+}

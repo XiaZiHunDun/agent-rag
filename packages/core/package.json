@@ -1,0 +1,13 @@
+{
+  "name": "@agent-rag/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./memory-record": "./src/memory-record.ts",
+    "./scope": "./src/scope.ts",
+    "./projector": "./src/projector.ts",
+    "./retrieval": "./src/retrieval.ts"
+  }
+}

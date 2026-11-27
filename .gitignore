@@ -1,0 +1,12 @@
+node_modules/
+.pnpm-store/
+dist/
+coverage/
+*.log
+*.tmp
+
+# Runtime data must never be committed.
+.agent-rag/
+data/
+memory.json
+projects.json

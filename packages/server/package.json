@@ -1,0 +1,24 @@
+{
+  "name": "@agent-rag/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "agent-rag": "./bin/agent-rag.mjs"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./service": "./src/service.ts"
+  },
+  "scripts": {
+    "test": "node --experimental-strip-types --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@agent-rag/client": "workspace:*",
+    "@agent-rag/core": "workspace:*",
+    "@agent-rag/projectors": "workspace:*",
+    "@agent-rag/store-text": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "zod": "3.25.76"
+  }
+}

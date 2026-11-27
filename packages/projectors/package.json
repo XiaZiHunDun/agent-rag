@@ -1,0 +1,14 @@
+{
+  "name": "@agent-rag/projectors",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./butler-session": "./src/butler-session.ts",
+    "./task-result": "./src/task-result.ts"
+  },
+  "dependencies": {
+    "@agent-rag/core": "workspace:*"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "@agent-rag/client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@agent-rag/core": "workspace:*",
+    "@agent-rag/store-text": "workspace:*"
+  },
+  "devDependencies": {
+    "@agent-rag/projectors": "workspace:*"
+  }
+}
