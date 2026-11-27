@@ -191,8 +191,15 @@ Authorization: Bearer <token>
 ### GET /v1/stats
 
 ```json
-{ "total": 42, "byScope": { "user\u0000user_me\u0000": 10, "project\u0000user_me\u0000prj_…": 32 }, "byKind": { "note": 30, "decision": 12 } }
+{
+  "total": 42,
+  "byScope": { "user\u0000user_me\u0000": 10, "project\u0000user_me\u0000prj_…": 32 },
+  "byKind": { "note": 30, "decision": 12 },
+  "bySource": { "wfxm": 25, "dsh-wfxm": 14, "unknown": 3 }
+}
 ```
+
+`bySource` 按 `source.client` 聚合；缺失或空白 `source.client` 的记录计入 `unknown`。
 
 ### 状态码
 
@@ -218,7 +225,7 @@ MCP server 通过 `agent-rag mcp --owner <id>` 启动，`--project <path>` 可�
 | `memory_report_task` | `taskId`, `goal`, `summary`, `status`, `projectId?`, `project?`, `changedFiles?`, `tests?`, `items?` | `{ projectId, written, recordIds, issues }` |
 | `memory_report_session` | `sessionId`, `summary`, `profile?`, `facts?` | `{ written, recordIds, issues }` |
 | `project_resolve` | `remoteUrl?`, `localPath?`, `name?` | `ProjectIdentity` |
-| `memory_stats` | 无 | `{ total, byScope, byKind }` |
+| `memory_stats` | 无 | `{ total, byScope, byKind, bySource }` |
 
 推荐的助手侧调用顺序：
 
@@ -241,11 +248,32 @@ MCP server 通过 `agent-rag mcp --owner <id>` 启动，`--project <path>` 可�
 | `remember` | 写入一条记忆 |
 | `recall [query]` | 按作用域召回 |
 | `inject` | 生成可注入的上下文块 |
-| `stats [--by-kind]` | 输出记录计数 |
+| `stats [--by-kind] [--by-source]` | 输出记录计数 |
 | `export --out <path>` | 把 store 中全部记录导出为 JSONL |
 | `import --in <path>` | 从 JSONL 按 id 幂等导入 |
 | `forget [--source <client>] [--dry-run] [--yes]` | 删除整个作用域，或按来源撤销记忆 |
 | `purge --expired [--dry-run] [--yes]` | 删除 `validTo` 已过期的记录（跨作用域） |
+
+### `stats [--by-kind] [--by-source]`
+
+默认只输出 `total` 与 `byScope`。`--by-kind` 追加 `byKind`，`--by-source` 追加
+`bySource`，两个选项可以同时使用。
+
+`bySource` 按 `source.client` 聚合记录数；缺失或空白 `source.client` 的记录统一
+归入 `unknown`。空库输出 `total: 0` 与空的 `bySource` 对象。
+
+```bash
+agent-rag stats --by-source
+agent-rag stats --by-kind --by-source
+```
+
+```json
+{
+  "total": 3,
+  "byScope": { "user\u0000user_me\u0000": 1, "project\u0000user_me\u0000prj_ab12": 2 },
+  "bySource": { "wfxm": 2, "unknown": 1 }
+}
+```
 
 ### `export --out <path>`
 

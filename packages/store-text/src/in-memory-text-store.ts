@@ -111,6 +111,7 @@ export class InMemoryTextStore implements TextMemoryStore {
   async stats(): Promise<MemoryStoreStats> {
     const byScope: Record<string, number> = {}
     const byKind: Record<string, number> = {}
+    const bySource: Record<string, number> = {}
     for (const record of this.records.values()) {
       const key = scopeKey({
         scope: record.scope,
@@ -119,8 +120,10 @@ export class InMemoryTextStore implements TextMemoryStore {
       })
       byScope[key] = (byScope[key] ?? 0) + 1
       byKind[record.kind] = (byKind[record.kind] ?? 0) + 1
+      const client = record.source.client?.trim() || "unknown"
+      bySource[client] = (bySource[client] ?? 0) + 1
     }
-    return { total: this.records.size, byScope, byKind }
+    return { total: this.records.size, byScope, byKind, bySource }
   }
 
   /** Snapshot for JSON persistence and replay tests. */

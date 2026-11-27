@@ -14,6 +14,7 @@ function record(
     title: string
     text: string
     kind?: MemoryRecord["kind"]
+    client?: string
     tags?: readonly string[]
     sensitivity?: MemoryRecord["sensitivity"]
     confidence?: number
@@ -29,7 +30,11 @@ function record(
     kind: overrides.kind ?? "note",
     title: overrides.title,
     text: overrides.text,
-    source: { kind: "manual", ref: `test:${overrides.title}` },
+    source: {
+      kind: "manual",
+      ref: `test:${overrides.title}`,
+      ...(overrides.client === undefined ? {} : { client: overrides.client }),
+    },
     ...(overrides.tags === undefined ? {} : { tags: overrides.tags }),
     ...(overrides.sensitivity === undefined ? {} : { sensitivity: overrides.sensitivity }),
     ...(overrides.confidence === undefined ? {} : { confidence: overrides.confidence }),
@@ -143,17 +148,18 @@ test("delete and deleteScope remove records and index entries", async () => {
   assert.equal((await store.search({ scope: p2, text: "gamma", limit: 10 })).length, 1)
 })
 
-test("stats group records by full scope key and kind", async () => {
+test("stats group records by full scope key, kind and source client", async () => {
   const store = new InMemoryTextStore()
   await store.upsertMany([
-    record(userScope, { title: "U", text: "u", kind: "preference" }),
-    record(p1, { title: "P1", text: "p1", kind: "note" }),
+    record(userScope, { title: "U", text: "u", kind: "preference", client: "wfxm" }),
+    record(p1, { title: "P1", text: "p1", kind: "note", client: "wfxm" }),
     record(p1, { title: "P1b", text: "p1b", kind: "decision" }),
   ])
   const stats = await store.stats()
   assert.equal(stats.total, 3)
   assert.deepEqual(Object.values(stats.byScope).sort(), [1, 2])
   assert.deepEqual(stats.byKind, { preference: 1, note: 1, decision: 1 })
+  assert.deepEqual(stats.bySource, { wfxm: 2, unknown: 1 })
 })
 
 test("listAll returns every scope including secret records, sorted by id", async () => {

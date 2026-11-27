@@ -36,6 +36,7 @@ interface CliValues {
   readonly sensitivity?: string
   readonly tag?: string[]
   readonly "by-kind"?: boolean
+  readonly "by-source"?: boolean
   readonly out?: string
   readonly in?: string
   readonly source?: string
@@ -61,7 +62,7 @@ Commands:
   forget                  Delete a whole scope or all memory from one source
   purge --expired         Delete every record whose validTo has passed
   resolve                 Resolve a project locator to a stable projectId
-  stats                   Print record counts by scope
+  stats                   Print record counts by scope, kind or source
   export --out <path>     Export all memory records as JSONL
   import --in <path>      Import memory records from a JSONL file
 
@@ -97,6 +98,8 @@ remember options:
 
 stats options:
   --by-kind               Include per-kind record counts
+  --by-source             Include per-source.client record counts; records
+                          without source.client are counted as unknown
 
 forget options:
   --source <client>       Delete every record whose source.client matches,
@@ -129,6 +132,7 @@ Examples:
   agent-rag resolve --remote-url git@github.com:owner/repo.git
   agent-rag forget --owner user_me --project . --yes
   agent-rag forget --source wfxm --yes
+  agent-rag stats --by-kind --by-source
   agent-rag purge --expired --dry-run
   agent-rag purge --expired --yes
   agent-rag export --out ~/agent-rag-backup.jsonl
@@ -283,7 +287,14 @@ async function commandResolve(values: CliValues): Promise<void> {
 async function commandStats(values: CliValues): Promise<void> {
   const stores = await loadStores(values)
   const stats = await stores.store.stats()
-  const output = values["by-kind"] ? stats : { total: stats.total, byScope: stats.byScope }
+  const output: {
+    total: number
+    byScope: Readonly<Record<string, number>>
+    byKind?: Readonly<Record<string, number>>
+    bySource?: Readonly<Record<string, number>>
+  } = { total: stats.total, byScope: stats.byScope }
+  if (values["by-kind"]) output.byKind = stats.byKind ?? {}
+  if (values["by-source"]) output.bySource = stats.bySource ?? {}
   console.log(JSON.stringify(output, null, 2))
 }
 
@@ -516,6 +527,7 @@ async function main(): Promise<void> {
       sensitivity: { type: "string" },
       tag: { type: "string", multiple: true },
       "by-kind": { type: "boolean" },
+      "by-source": { type: "boolean" },
       out: { type: "string" },
       in: { type: "string" },
       source: { type: "string" },
