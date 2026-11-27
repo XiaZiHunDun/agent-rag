@@ -1,7 +1,7 @@
 import { open, readFile, writeFile } from "node:fs/promises"
 import { parseArgs } from "node:util"
 import { AgentRagHttpClient, collectInjection } from "@agent-rag/client"
-import { recordMatchesScope, type MemoryKind } from "@agent-rag/core"
+import { isExpired, recordMatchesScope, type MemoryKind } from "@agent-rag/core"
 import { createHttpServer } from "./http-server.ts"
 import { parseMemoryJsonl, serializeMemoryJsonl } from "./memory-jsonl.ts"
 import { runMcpServer } from "./mcp-server.ts"
@@ -40,6 +40,7 @@ interface CliValues {
   readonly in?: string
   readonly source?: string
   readonly force?: boolean
+  readonly expired?: boolean
   readonly "dry-run"?: boolean
   readonly yes?: boolean
   readonly help?: boolean
@@ -58,6 +59,7 @@ Commands:
   recall [query]          Search memory and print hits as JSON
   remember                Save one durable fact
   forget                  Delete a whole scope or all memory from one source
+  purge --expired         Delete every record whose validTo has passed
   resolve                 Resolve a project locator to a stable projectId
   stats                   Print record counts by scope
   export --out <path>     Export all memory records as JSONL
@@ -104,6 +106,12 @@ forget options:
   Without --source, deletes the current scope: project when --project or
   --project-id is given, otherwise the user scope.
 
+purge options:
+  --expired               Required; select records whose validTo has passed
+                          across user and project scopes
+  --dry-run               Preview matched/deleted counts; never writes
+  --yes                   Required to actually delete
+
 export options:
   --out <path>            Destination JSONL file (required)
   --force                 Overwrite the destination if it already exists
@@ -121,6 +129,8 @@ Examples:
   agent-rag resolve --remote-url git@github.com:owner/repo.git
   agent-rag forget --owner user_me --project . --yes
   agent-rag forget --source wfxm --yes
+  agent-rag purge --expired --dry-run
+  agent-rag purge --expired --yes
   agent-rag export --out ~/agent-rag-backup.jsonl
   agent-rag import --in ~/agent-rag-backup.jsonl
 `
@@ -402,6 +412,30 @@ async function commandForgetBySource(values: CliValues, source: string): Promise
   )
 }
 
+async function commandPurge(values: CliValues): Promise<void> {
+  if (values.expired !== true) {
+    throw new Error("purge requires --expired")
+  }
+
+  const stores = await loadStores(values)
+  const now = new Date().toISOString()
+  const records = await stores.store.listAll()
+  const matches = records.filter((record) => isExpired(record, now))
+  // Like forget --source: preview unless --yes is present, and --dry-run always
+  // wins so an explicit dry-run can never write even with --yes.
+  const dryRun = values["dry-run"] === true || values.yes !== true
+
+  let deleted = 0
+  if (!dryRun) {
+    for (const record of matches) {
+      await stores.store.delete(record.id)
+      deleted += 1
+    }
+  }
+
+  console.log(JSON.stringify({ matched: matches.length, deleted, dryRun }, null, 2))
+}
+
 async function commandForget(values: CliValues): Promise<void> {
   if (values.source !== undefined) {
     await commandForgetBySource(values, values.source)
@@ -486,6 +520,7 @@ async function main(): Promise<void> {
       in: { type: "string" },
       source: { type: "string" },
       force: { type: "boolean" },
+      expired: { type: "boolean" },
       "dry-run": { type: "boolean" },
       yes: { type: "boolean" },
       help: { type: "boolean" },
@@ -528,6 +563,9 @@ async function main(): Promise<void> {
       return
     case "forget":
       await commandForget(cliValues)
+      return
+    case "purge":
+      await commandPurge(cliValues)
       return
     default:
       throw new Error(`unknown command: ${command}\n\n${USAGE}`)
