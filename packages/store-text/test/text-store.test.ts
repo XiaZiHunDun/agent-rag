@@ -155,3 +155,17 @@ test("stats group records by full scope key and kind", async () => {
   assert.deepEqual(Object.values(stats.byScope).sort(), [1, 2])
   assert.deepEqual(stats.byKind, { preference: 1, note: 1, decision: 1 })
 })
+
+test("listAll returns every scope including secret records, sorted by id", async () => {
+  const store = new InMemoryTextStore()
+  await store.upsertMany([
+    record(userScope, { id: "u", title: "U", text: "u", sensitivity: "secret" }),
+    record(p1, { id: "p", title: "P", text: "p" }),
+  ])
+  const all = await store.listAll()
+  assert.deepEqual(
+    all.map((item) => item.id),
+    ["p", "u"],
+  )
+  assert.equal(all.find((item) => item.id === "u")?.sensitivity, "secret")
+})

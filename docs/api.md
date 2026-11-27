@@ -225,3 +225,58 @@ MCP server 通过 `agent-rag mcp --owner <id>` 启动，`--project <path>` 可�
 2. 执行中遇到明确约定/决策：`memory_remember(...)`。
 3. 任务结束：`memory_report_task(...)`，把结论沉淀到项目作用域。
 4. 用户画像有变化：`memory_report_session(...)`。
+
+## CLI
+
+命令行入口为 `agent-rag <command>`（仓库内可直接
+`node packages/server/src/cli.ts <command>`）。除 `version` 外，通用选项包括
+`--data-dir <dir>`、`--store json|memory`、`--owner <id>` 等；本地默认读写
+`~/.agent-rag/`（可用 `AGENT_RAG_HOME` 覆盖）。
+
+| 命令 | 说明 |
+| --- | --- |
+| `version [--json]` | 打印版本号 |
+| `resolve` | 把仓库路径 / git remote 解析为稳定 `projectId` |
+| `remember` | 写入一条记忆 |
+| `recall [query]` | 按作用域召回 |
+| `inject` | 生成可注入的上下文块 |
+| `stats [--by-kind]` | 输出记录计数 |
+| `export --out <path>` | 把 store 中全部记录导出为 JSONL |
+| `import --in <path>` | 从 JSONL 按 id 幂等导入 |
+| `forget --yes` | 删除整个作用域 |
+
+### `export --out <path>`
+
+导出 store 中的**全部**记忆记录，不区分 user / project 作用域，也不过滤
+`secret` 或已过期记录。文件为 JSONL：每行一个完整的 `MemoryRecord` JSON
+对象，记录按 `id` 排序，文件以换行结尾；没有记录时生成空文件。
+
+```bash
+agent-rag export --out ~/agent-rag-backup.jsonl
+agent-rag export --data-dir /srv/agent-rag --out /tmp/memory.jsonl
+```
+
+目标文件已存在时默认拒绝覆盖并以非 0 退出；确认覆盖需加 `--force`。
+
+```bash
+agent-rag export --out ~/agent-rag-backup.jsonl --force
+```
+
+成功时输出 `{ "exported": N, "out": "..." }`（JSON）。
+
+### `import --in <path>`
+
+逐行读取 JSONL，每条记录先做完整校验，再按 `id` 执行 upsert：
+
+- 相同 `id` 重复导入只会更新同一条记录，不会产生重复数据；
+- 文件内同一 `id` 出现多次时，后面的行覆盖前面的行；
+- 空行忽略；
+- 任意一行非法（JSON 解析失败或字段校验失败）时，以
+  `第 N 行: 原因` 报错并以非 0 退出，**整批不写入**（N 为原始 1-based 行号）。
+
+```bash
+agent-rag import --in ~/agent-rag-backup.jsonl
+```
+
+成功时输出 `{ "imported": N, "in": "..." }`（JSON）。导入不校验记录是否属于当前
+`--owner`，备份中的 `ownerId` / `projectId` 原样保留，便于跨机器迁移。

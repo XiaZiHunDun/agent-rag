@@ -175,9 +175,10 @@ retireSupersededRecords                  # 关闭被取代记录的 validTo
 
 - **本地单用户**：`JsonTextStore`（原子写、启动重建索引），`projects.json` 保存项目身份。
 - **共享/多用户**：`PostgresTextStore`（tokenized `tsvector` + `simple` 配置，中文二元组可用），直接复用现有连接池。
-- **后续**：SQLite FTS5 适配、embedding 向量召回与 rerank（在不改变 `TextMemoryStore` 契约的前提下加混合检索层）、导出/导入、按来源撤销。
+- **后续**：SQLite FTS5 适配、embedding 向量召回与 rerank（在不改变 `TextMemoryStore` 契约的前提下加混合检索层）、按来源撤销。
 
-`TextMemoryStore` 契约（upsert/get/delete/deleteScope/search/stats）是存储可替换的边界。
+`TextMemoryStore` 契约（upsert/get/delete/deleteScope/search/listAll/stats）是存储可替换的边界。
+`listAll` 只供备份/导出使用，绕过作用域过滤；召回仍必须走 `search(scope)`。
 
 ## 12. 安全与隐私
 

@@ -87,6 +87,10 @@ export class JsonTextStore implements TextMemoryStore {
     return this.inner.search(query)
   }
 
+  async listAll(): Promise<readonly MemoryRecord[]> {
+    return this.inner.snapshot()
+  }
+
   async stats(): Promise<MemoryStoreStats> {
     return this.inner.stats()
   }
