@@ -28,13 +28,17 @@ interface CliValues {
   readonly name?: string
   readonly goal?: string
   readonly text?: string
-  readonly kind?: string
+  /** Single-valued for remember; repeatable for recall. */
+  readonly kind?: string | readonly string[]
   readonly title?: string
   readonly scope?: string
   readonly limit?: string
   readonly "max-chars"?: string
+  readonly "min-confidence"?: string
   readonly sensitivity?: string
   readonly tag?: string[]
+  readonly "include-expired"?: boolean
+  readonly "include-sensitive"?: boolean
   readonly "by-kind"?: boolean
   readonly "by-source"?: boolean
   readonly out?: string
@@ -90,8 +94,16 @@ inject options:
   --goal <text>           Current task goal
   --max-chars <n>         Context budget (default: 2500)
 
+recall options:
+  --kind <kind>           Filter by memory kind; repeat for any-of
+  --tag <tag>             Filter by tag; repeat for any-of
+  --min-confidence <n>    Only records with confidence >= n (0..1)
+  --include-expired       Include records whose validTo has passed
+  --include-sensitive     Include sensitivity=secret records
+  --limit <n>             Max hits (default: 10, max: 50)
+
 remember options:
-  --kind <kind>           profile|preference|decision|convention|...
+  --kind <kind>           Single value: profile|preference|decision|...
   --title <title> --text <text>
   --scope user|project    Default: project when a project id is known
   --tag <tag>             Repeatable
@@ -132,6 +144,8 @@ Examples:
   agent-rag mcp --remote http://127.0.0.1:8787 --project ~/projects/agent-rag
   agent-rag serve --owner user_me --port 8787
   agent-rag inject --owner user_me --project . --goal "修复登录超时"
+  agent-rag recall --owner user_me --project . 发布 --kind convention --tag release
+  agent-rag recall --owner user_me --include-sensitive --include-expired
   agent-rag resolve --remote-url git@github.com:owner/repo.git
   agent-rag forget --owner user_me --project . --yes
   agent-rag forget --source wfxm --yes
@@ -344,8 +358,62 @@ async function commandImport(values: CliValues): Promise<void> {
   console.log(JSON.stringify({ imported: records.length, in: values.in }, null, 2))
 }
 
+const RECALL_KINDS = new Set<MemoryKind>([
+  "profile",
+  "preference",
+  "relationship",
+  "commitment",
+  "decision",
+  "convention",
+  "recipe",
+  "issue",
+  "task_summary",
+  "note",
+])
+
+function parseRecallKinds(
+  raw: string | readonly string[] | undefined,
+): readonly MemoryKind[] | undefined {
+  if (raw === undefined) return undefined
+  const values = Array.isArray(raw) ? raw : [raw]
+  const kinds: MemoryKind[] = []
+  for (const value of values) {
+    const kind = value.trim()
+    if (!RECALL_KINDS.has(kind as MemoryKind)) {
+      throw new Error(
+        `invalid --kind: ${value} (expected one of ${[...RECALL_KINDS].join("|")})`,
+      )
+    }
+    if (!kinds.includes(kind as MemoryKind)) kinds.push(kind as MemoryKind)
+  }
+  return kinds
+}
+
+function parseRecallTags(raw: readonly string[] | undefined): readonly string[] | undefined {
+  if (raw === undefined) return undefined
+  const tags: string[] = []
+  for (const value of raw) {
+    const tag = value.trim()
+    if (!tag) throw new Error("invalid --tag: tag must be a non-empty string")
+    if (!tags.includes(tag)) tags.push(tag)
+  }
+  return tags
+}
+
+function parseMinConfidence(raw: string | undefined): number | undefined {
+  if (raw === undefined) return undefined
+  const value = Number(raw.trim())
+  if (!raw.trim() || !Number.isFinite(value) || value < 0 || value > 1) {
+    throw new Error(`invalid --min-confidence: ${raw} (expected a number between 0 and 1)`)
+  }
+  return value
+}
+
 async function commandRecall(values: CliValues, positionals: readonly string[]): Promise<void> {
   const ownerId = requireOwner(values)
+  const kinds = parseRecallKinds(values.kind)
+  const tags = parseRecallTags(values.tag)
+  const minConfidence = parseMinConfidence(values["min-confidence"])
   const stores = await loadStores(values)
   const projectId = await resolveProjectId(stores, values)
   const service = createService(stores, values, projectId)
@@ -354,6 +422,11 @@ async function commandRecall(values: CliValues, positionals: readonly string[]):
     text: values.text ?? positionals.join(" "),
     ...(projectId === undefined ? {} : { projectId }),
     ...(values.limit === undefined ? {} : { limit: Number(values.limit) }),
+    ...(kinds === undefined ? {} : { kinds }),
+    ...(tags === undefined ? {} : { tags }),
+    ...(minConfidence === undefined ? {} : { minConfidence }),
+    ...(values["include-expired"] ? { includeExpired: true } : {}),
+    ...(values["include-sensitive"] ? { includeSensitive: true } : {}),
   })
   console.log(JSON.stringify(hits, null, 2))
 }
@@ -376,7 +449,10 @@ async function commandInject(values: CliValues, positionals: readonly string[]):
 
 async function commandRemember(values: CliValues): Promise<void> {
   const ownerId = requireOwner(values)
-  if (!values.kind || !values.title || !values.text) {
+  // remember's --kind is parsed as a single string (repeated flags keep the
+  // last value, as before); recall is the only command with an array.
+  const kind = Array.isArray(values.kind) ? values.kind.at(-1) : values.kind
+  if (!kind || !values.title || !values.text) {
     throw new Error("remember requires --kind, --title and --text")
   }
   const stores = await loadStores(values)
@@ -390,7 +466,7 @@ async function commandRemember(values: CliValues): Promise<void> {
     ownerId,
     scope,
     ...(scope === "project" && projectId ? { projectId } : {}),
-    kind: values.kind as MemoryKind,
+    kind: kind as MemoryKind,
     title: values.title,
     text: values.text,
     ...(values.tag === undefined ? {} : { tags: values.tag }),
@@ -536,45 +612,56 @@ async function main(): Promise<void> {
     return
   }
 
+  const commonOptions = {
+    "data-dir": { type: "string" as const },
+    store: { type: "string" as const },
+    owner: { type: "string" as const },
+    user: { type: "string" as const },
+    project: { type: "string" as const },
+    "project-id": { type: "string" as const },
+    client: { type: "string" as const },
+    host: { type: "string" as const },
+    port: { type: "string" as const },
+    token: { type: "string" as const },
+    remote: { type: "string" as const },
+    "remote-url": { type: "string" as const },
+    path: { type: "string" as const },
+    name: { type: "string" as const },
+    goal: { type: "string" as const },
+    text: { type: "string" as const },
+    title: { type: "string" as const },
+    scope: { type: "string" as const },
+    limit: { type: "string" as const },
+    "max-chars": { type: "string" as const },
+    "min-confidence": { type: "string" as const },
+    sensitivity: { type: "string" as const },
+    tag: { type: "string" as const, multiple: true as const },
+    "include-expired": { type: "boolean" as const },
+    "include-sensitive": { type: "boolean" as const },
+    "by-kind": { type: "boolean" as const },
+    "by-source": { type: "boolean" as const },
+    out: { type: "string" as const },
+    in: { type: "string" as const },
+    id: { type: "string" as const },
+    source: { type: "string" as const },
+    force: { type: "boolean" as const },
+    expired: { type: "boolean" as const },
+    "dry-run": { type: "boolean" as const },
+    yes: { type: "boolean" as const },
+    help: { type: "boolean" as const },
+  }
+
+  // recall accepts repeatable --kind filters; remember keeps its single value
+  // (repeating it still resolves to the last value, as before).
+  const options =
+    command === "recall"
+      ? { ...commonOptions, kind: { type: "string" as const, multiple: true as const } }
+      : { ...commonOptions, kind: { type: "string" as const } }
+
   const { values, positionals } = parseArgs({
     args: argv.slice(1),
     allowPositionals: true,
-    options: {
-      "data-dir": { type: "string" },
-      store: { type: "string" },
-      owner: { type: "string" },
-      user: { type: "string" },
-      project: { type: "string" },
-      "project-id": { type: "string" },
-      client: { type: "string" },
-      host: { type: "string" },
-      port: { type: "string" },
-      token: { type: "string" },
-      remote: { type: "string" },
-      "remote-url": { type: "string" },
-      path: { type: "string" },
-      name: { type: "string" },
-      goal: { type: "string" },
-      text: { type: "string" },
-      kind: { type: "string" },
-      title: { type: "string" },
-      scope: { type: "string" },
-      limit: { type: "string" },
-      "max-chars": { type: "string" },
-      sensitivity: { type: "string" },
-      tag: { type: "string", multiple: true },
-      "by-kind": { type: "boolean" },
-      "by-source": { type: "boolean" },
-      out: { type: "string" },
-      in: { type: "string" },
-      id: { type: "string" },
-      source: { type: "string" },
-      force: { type: "boolean" },
-      expired: { type: "boolean" },
-      "dry-run": { type: "boolean" },
-      yes: { type: "boolean" },
-      help: { type: "boolean" },
-    },
+    options,
   })
 
   if (values.help) {

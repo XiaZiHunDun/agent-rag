@@ -6,7 +6,7 @@
 
 - **用户 + 项目两级记忆**：user scope 存画像/偏好/承诺，project scope 存约定/决策/任务结论，严格隔离。
 - **注入（injection）**：一次调用返回可直接拼进 system prompt 的 `<agent-rag-memory>` 文本块，带常驻画像、按目标召回、字符预算与截断标记。
-- **召回（recall）**：BM25 文本检索，标题加权、中文单字+二元组、标签与结构化 facts。
+- **召回（recall）**：BM25 文本检索，标题加权、中文单字+二元组、标签与结构化 facts；支持按 kind / tag / 置信度过滤，并可显式包含过期或 `secret` 记录。
 - **多端共建**：项目身份由 git remote 解析为稳定 `projectId`，不同 clone、不同助手落到同一项目；用户身份由统一的 `ownerId` 指定。
 - **三种接入**：MCP stdio、HTTP JSON API、嵌入式 SDK（现有 WFXM 适配层）。
 - **可替换存储**：内存、JSON 文件（原子写）、Postgres（`tsvector`）共用同一 `TextMemoryStore` 契约。
@@ -18,7 +18,7 @@
 
 ```bash
 pnpm install
-pnpm test          # 74 个测试
+pnpm test          # 114 个测试
 pnpm typecheck
 ```
 
@@ -103,6 +103,9 @@ agent-rag resolve --remote-url git@github.com:owner/repo.git
 agent-rag remember --owner user_me --kind preference --title 回复风格 --text "先结论，后细节。"
 agent-rag inject --owner user_me --project . --goal "修复登录超时"
 agent-rag recall --owner user_me --project . 发布
+agent-rag recall --owner user_me --project . 发布 \
+  --kind convention --kind decision --tag release --min-confidence 0.5
+agent-rag recall --owner user_me --include-sensitive --include-expired
 agent-rag stats
 agent-rag forget --owner user_me --project . --yes
 ```
