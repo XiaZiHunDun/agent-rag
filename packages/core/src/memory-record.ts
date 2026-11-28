@@ -18,6 +18,20 @@ export type MemoryKind =
   | "task_summary"
   | "note"
 
+/** Runtime list of every valid kind; keep in sync with `MemoryKind` above. */
+export const MEMORY_KINDS = [
+  "profile",
+  "preference",
+  "relationship",
+  "commitment",
+  "decision",
+  "convention",
+  "recipe",
+  "issue",
+  "task_summary",
+  "note",
+] as const satisfies readonly MemoryKind[]
+
 export type MemorySensitivity = "normal" | "private" | "secret"
 
 export type MemorySourceKind =
@@ -104,18 +118,7 @@ export class MemoryValidationError extends Error {
 }
 
 const SCOPES = new Set<MemoryScope>(["user", "project"])
-const KINDS = new Set<MemoryKind>([
-  "profile",
-  "preference",
-  "relationship",
-  "commitment",
-  "decision",
-  "convention",
-  "recipe",
-  "issue",
-  "task_summary",
-  "note",
-])
+const KINDS = new Set<MemoryKind>(MEMORY_KINDS)
 const SENSITIVITIES = new Set<MemorySensitivity>(["normal", "private", "secret"])
 const SOURCE_KINDS = new Set<MemorySourceKind>([
   "butler_session",

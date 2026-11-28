@@ -1,7 +1,12 @@
 import { open, readFile, writeFile } from "node:fs/promises"
 import { parseArgs } from "node:util"
 import { AgentRagHttpClient, collectInjection } from "@agent-rag/client"
-import { isExpired, recordMatchesScope, type MemoryKind } from "@agent-rag/core"
+import {
+  MEMORY_KINDS,
+  isExpired,
+  recordMatchesScope,
+  type MemoryKind,
+} from "@agent-rag/core"
 import { createHttpServer } from "./http-server.ts"
 import { parseMemoryJsonl, serializeMemoryJsonl } from "./memory-jsonl.ts"
 import { runMcpServer } from "./mcp-server.ts"
@@ -358,18 +363,7 @@ async function commandImport(values: CliValues): Promise<void> {
   console.log(JSON.stringify({ imported: records.length, in: values.in }, null, 2))
 }
 
-const RECALL_KINDS = new Set<MemoryKind>([
-  "profile",
-  "preference",
-  "relationship",
-  "commitment",
-  "decision",
-  "convention",
-  "recipe",
-  "issue",
-  "task_summary",
-  "note",
-])
+const RECALL_KINDS: ReadonlySet<string> = new Set(MEMORY_KINDS)
 
 function parseRecallKinds(
   raw: string | readonly string[] | undefined,
