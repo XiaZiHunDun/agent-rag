@@ -247,13 +247,45 @@ MCP server 通过 `agent-rag mcp --owner <id>` 启动，`--project <path>` 可�
 | `version [--json]` | 打印版本号 |
 | `resolve` | 把仓库路径 / git remote 解析为稳定 `projectId` |
 | `remember` | 写入一条记忆 |
-| `recall [query]` | 按作用域召回 |
+| `recall [query]` | 按作用域召回，支持 kind / tag / 置信度过滤与过期、敏感记录开关 |
 | `inject` | 生成可注入的上下文块 |
 | `stats [--by-kind] [--by-source]` | 输出记录计数 |
 | `export --out <path>` | 把 store 中全部记录导出为 JSONL |
 | `import --in <path>` | 从 JSONL 按 id 幂等导入 |
 | `forget [--id <id>] [--source <client>] [--dry-run] [--yes]` | 删除整个作用域、按来源撤销，或按 id 删除单条记忆（`--id` 与 `--source` 互斥） |
 | `purge --expired [--dry-run] [--yes]` | 删除 `validTo` 已过期的记录（跨作用域） |
+
+### `recall [query]`
+
+按作用域召回记忆，结果以 JSON 数组输出（每项含 `record`、`score`、
+`matchedTerms`）。默认检索当前 `--owner` 的 user scope；传 `--project` /
+`--project-id` 时检索 project scope。不传 query 或传空字符串时，返回该作用域内的
+近期记录。
+
+过滤选项：
+
+- `--kind <kind>`：按 kind 过滤，可重复；多个 kind 为 any-of。
+- `--tag <tag>`：按 tag 过滤，可重复；多个 tag 为 any-of（命中任一即可）。
+- `--min-confidence <0-1>`：仅返回 `confidence >= n` 的记录，边界值包含在内。
+- `--include-expired`：包含 `validTo` 已过期的记录；默认过滤。
+- `--include-sensitive`：包含 `sensitivity=secret` 的记录；默认过滤。
+- `--limit <n>`：最多返回 n 条，默认 10，上限 50。
+
+`--kind` / `--tag` 对 `recall` 可重复传入；`remember --kind` 仍是单值选项。
+非法 `--kind`、空 `--tag` 或 `--min-confidence` 超出 0..1 时，命令在 stderr
+报 `[agent-rag] invalid --...` 并以非 0 退出。
+
+```bash
+# kind / tag 组合过滤（多个值为 any-of）
+agent-rag recall --owner user_me --project . 发布 \
+  --kind convention --kind decision --tag release
+
+# 只要置信度 >= 0.5 的记录
+agent-rag recall --owner user_me --project . 发布 --min-confidence 0.5
+
+# 显式包含过期与 secret 记录（谨慎使用）
+agent-rag recall --owner user_me --include-sensitive --include-expired
+```
 
 ### `stats [--by-kind] [--by-source]`
 
@@ -455,6 +487,7 @@ CLI 进程的退出码约定如下：
 | `Unknown option '--x'` / `Option '--x' argument missing` | 选项名拼错，或需要值的选项没有跟值。 | 对照 `agent-rag --help`；含空格的值要加引号；以 `-` 开头的参数可放在 `--` 之后作为位置参数。 |
 | `export requires --out <path>` / `import requires --in <path>` / `purge requires --expired` | 缺少该子命令的必填选项。 | 补齐对应选项；`forget` 未带 `--id` / `--source` 时按整域删除处理，需要 `--owner` 与 `--yes`。 |
 | `forget accepts either --id or --source, not both` | 同时传了互斥选项。 | 按 id 删单条用 `--id`，按来源撤销用 `--source`，二选一。 |
+| `invalid --kind: ...` / `invalid --tag: ...` / `invalid --min-confidence: ...` | `recall` 的过滤参数非法。 | `--kind` 必须是已定义的 kind；`--tag` 不能为空；`--min-confidence` 需在 0..1 之间。 |
 | `refusing to delete memory without --yes` | 整域删除未带确认。 | 先用 `--dry-run` 预览匹配条数，确认后加 `--yes`。 |
 
 ### 排查顺序
